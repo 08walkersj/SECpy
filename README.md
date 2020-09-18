@@ -6,7 +6,7 @@ Core Dependencies:
 - Scipy
 
 Data Dependencies:
-- Chaospy
+- Chaosmagpy
 - Pandas
 - Apexpy
 
