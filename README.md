@@ -1,13 +1,12 @@
 # SECpy
 Code for the modeling of diveregence free horizontal currents using Spherical Elementary Current analysis.
 
-Dependencies:
-Core
+Core Dependencies:
 - Numpy
-Data
+Data Dependencies:
 - Chaospy
 - Pandas
 - Apexpy
-Visualisation
+Visualisation Dependencies:
 - Matplotlib
 - Cartopy
