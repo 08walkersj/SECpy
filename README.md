@@ -3,6 +3,7 @@ Code for the modeling of diveregence free horizontal currents using Spherical El
 
 Core Dependencies:
 - Numpy
+- Scipy
 
 Data Dependencies:
 - Chaospy
