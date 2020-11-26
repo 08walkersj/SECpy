@@ -795,6 +795,37 @@ class SECS:
                 raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
         return G
     def eval_G_Matrix_B(self, eval_radius= RE, eval_longitude=None, eval_latitude=None):
+        """
+        When multiplied by the SEC pole amplitudes these matrices will return the magnetic field at the evaluation points.
+
+        Parameters
+        ----------
+        eval_radius : float (Meters), optional
+            Radial distance from the centre of the Earth to the magnetometer(s). The default is RE.
+        eval_longitude : numpy.ndarray (Degrees)
+            Longitude position of the evaluation point(s). The default is set by user in set up.
+        eval_latitude : numpy.ndarray (Degrees)
+            Latitude position of the evaluation point(s). The default is set by user in set up.
+
+        Raises
+        ------
+        ArgumentError
+            Raised if not using values in set up and both longitude and latitude are being used.
+
+        Returns (Mode dependent)
+        -------
+        → mode='default' with no telluric poles
+        
+        Gr, Ge, Gn : (numpy.ndarray, numpy.ndarray, numpy.ndarray)
+            Radial, eastward, northward components of the G matrix at the evaluation point(s).
+        
+        → mode='image' or 'default' with telluric poles
+        
+        (Gr, Ge, Gn), (Gr2, Ge2, Gn2) : ((numpy.ndarray, numpy.ndarray, numpy.ndarray), (numpy.ndarray, numpy.ndarray, numpy.ndarray))
+            G matrix that will show Ionospheric SEC pole contribution to the magnetic field measurements at the evaluation point(s) when multiplied by SEC pole amplitude,
+            G matrix that will show Telluric SEC pole contribution to the magnetic field measurements at the evaluation point(s) when multiplied by SEC pole amplitude.
+
+        """
         if eval_longitude is None and eval_latitude is None:
             eval_longitude= self.eval_longitude
             eval_latitude= self.eval_latitude
@@ -855,6 +886,36 @@ class SECS:
         else:
             raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
     def eval_G_Matrix_J(self, eval_radius=None, eval_longitude=None, eval_latitude=None, singularity_limit=0):
+        """
+        
+
+        When multiplied by the SEC pole amplitudes these matrices will return the sheet current density at the evaluation points.
+
+        Parameters
+        ----------
+        eval_radius : float (Meters), optional
+            Radial distance from the centre of the Earth to the magnetometer(s). The default is set by user in set up.
+        eval_longitude : numpy.ndarray (Degrees)
+            Longitude position of the evaluation point(s). The default is set by user in set up.
+        eval_latitude : numpy.ndarray (Degrees)
+            Latitude position of the evaluation point(s). The default is set by user in set up.
+        singularity_limit : TYPE, optional
+            Limit that signifies a change in formula close to the formula close to the SEC pole. The method is based on equations 2.44 from Vanhamäki 2020.
+            The default is 0.
+
+        Raises
+        ------
+        ArgumentError
+            Raised if not using values in set up and both longitude and latitude are being used.
+
+        Returns
+        -------
+        East_Current_G : numpy.ndarray
+            Eastward components of the G matrix at the evaluation point(s) for the sheet current.
+        North_Current_G : numpy.ndarray
+            Northward components of the G matrix at the evaluation point(s) for the sheet current.
+
+        """
         singularity_limit= singularity_limit/self.R
         if eval_radius is None:
             eval_radius= self.R
@@ -1156,11 +1217,11 @@ if __name__== '__main__':
                      fig.add_subplot(gs[2], projection= proj), fig.add_subplot(gs[3])]
     #Add cartopy features to the subplots
     for ax in axes[:-1]:
-        ax.scatter(node_lons, node_lats, transform =ccrs.Geodetic(), color='red', label= 'SEC Poles', s= 0.5, zorder=50)
+        ax.scatter(node_lons, node_lats, transform =ccrs.PlateCarree(), color='red', label= 'SEC Poles', s= 0.5, zorder=50)
         PlottingTools.features(ax)
     #Plot magnetometer locations
     for ax in axes[1:-1]:
-        ax.scatter(MagLon, MagLat, transform =ccrs.Geodetic(), marker= '*', color= 'darkorange', label= 'Magnetometer \n Station', zorder=100)
+        ax.scatter(MagLon, MagLat, transform =ccrs.PlateCarree(), marker= '*', color= 'darkorange', label= 'Magnetometer \n Station', zorder=100)
     #Plot magnetometer data
     axes[-2].set_title('Magnetic Field on Ground') 
     Je_m, Jn_m = PlottingTools.Geocentric_to_PlateCarree_vector_components(Bphi, -Btheta, MagLat) #Conversion of vectors to platecarree for plotting
@@ -1170,7 +1231,7 @@ if __name__== '__main__':
     #Plot the magnetic field at the points on the evaluation grid
     axes[-2].quiver(eval_lon, eval_lat, *PlottingTools.Geocentric_to_PlateCarree_vector_components(*Mag[1:],eval_lat), zorder=100,scale=(1e-5)/8, transform = ccrs.PlateCarree(), color='Black', label='Total Field', alpha=0.7)
     #Plot the radial component of the magnetic field at the points on the evaluation grid using a matplotlib colour map
-    axes[-2].scatter(eval_lon, eval_lat, c= Mag[0], vmin=min(Mag[0]), vmax=max(Mag[0]), cmap=mpl.cm.bwr, transform= ccrs.Geodetic(), zorder=50)
+    axes[-2].scatter(eval_lon, eval_lat, c= Mag[0], vmin=min(Mag[0]), vmax=max(Mag[0]), cmap=mpl.cm.bwr, transform= ccrs.PlateCarree(), zorder=50)
     #Plot the current at the points on the evaluation grid
     axes[1].set_title('Ionospheric Currents')
     CurQ=  axes[1].quiver(eval_lon, eval_lat, *PlottingTools.Geocentric_to_PlateCarree_vector_components(*Cur,eval_lat), zorder=100,scale=(1e1)/2, transform = ccrs.PlateCarree(), color='Black', label='Ionospheric Current', alpha=0.7)
@@ -1178,11 +1239,11 @@ if __name__== '__main__':
                        coordinates='figure')
     #Plot the magnitudes of currents using a matplotlib colour map
     CurMag=np.sqrt((Cur[0]**2) +Cur[1]**2)
-    axes[1].scatter(eval_lon, eval_lat, c= CurMag, vmin=min(CurMag), vmax= 0.6*max(CurMag), cmap= mpl.cm.afmhot_r, transform= ccrs.Geodetic(), zorder=50)
+    axes[1].scatter(eval_lon, eval_lat, c= CurMag, vmin=min(CurMag), vmax= 0.6*max(CurMag), cmap= mpl.cm.afmhot_r, transform= ccrs.PlateCarree(), zorder=50)
     #Plot the amplitudes of the SEC poles using a matplotlib colour map
     axes[0].set_title('SEC POLE Amplitudes')
     scalars= poles.Amplitude(Btheta, Bphi, Br)
-    axes[0].scatter(node_lons, node_lats, c= scalars, vmin=-45000, vmax=45000, cmap=mpl.cm.jet, transform= ccrs.Geodetic(), zorder=50)
+    axes[0].scatter(node_lons, node_lats, c= scalars, vmin=-45000, vmax=45000, cmap=mpl.cm.jet, transform= ccrs.PlateCarree(), zorder=50)
     mappable=mpl.cm.ScalarMappable(norm = mpl.colors.Normalize(vmin=-45000, vmax=45000), cmap=mpl.cm.jet)
     cbar=plt.colorbar(mappable=mappable)
     cbar.set_label('Ionospheric SEC Pole Amplitudes', rotation=270, labelpad=30)
