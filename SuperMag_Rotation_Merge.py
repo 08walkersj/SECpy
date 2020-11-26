@@ -11,10 +11,49 @@ import numpy as np
 import glob
 import sys
 def SuperMag2Geo(N, E, D):
+    """
+    Applies a rotation to the data points using a declination angle
+    
+    Parameters
+    ----------
+    N : numpy.ndarray
+        Magnetometer measurement in the north direction.
+    E : numpy.ndarray
+        Magnetometer measurement in the east direction.
+    D : numpy.ndarray
+        Declination of each data point.
+
+    Returns
+    -------
+    N2 : numpy.ndarray
+        New north vector in the direction of magnetic north.
+    E2 : numpy.ndarray
+        New east vector in the direction of magnetic east.
+
+    """
     E2= E*np.cos(D) +N*np.sin(D)
     N2= N*np.cos(D)- E*np.sin(D)
     return N2, E2
 def declination(glat, glon, radius, year):
+    """
+    Calculates the Declination angle of the each data point from the CHAOS model
+    
+    Parameters
+    ----------
+    glat : numpy.ndarray (degrees)
+        geographic lattitude.
+    glon : numpy.ndarray (degrees)
+        geographic longitude.
+    radius : float, optional
+        the radius from the centre of the earth to the points.
+    year : int
+        year.
+    Returns
+    -------
+    numpy.ndarray (radians)
+        Declination used to rotate the magnetometer vectors.
+
+    """
     pysymmetry_path = '/Home/siv32/zef014/'
     if pysymmetry_path not in sys.path:
         sys.path.append(pysymmetry_path)
@@ -35,9 +74,44 @@ def declination(glat, glon, radius, year):
     glat, h, Bnorth, B_down = geodesy.geoc2geod(colat, radius, Bth, Br)
     return np.arctan(Beast/Bnorth)
 def chaos_dec(glat, glon, year, radius= 6371.2e3):
+    """
+
+    Parameters
+    ----------
+    glat : numpy.ndarray (degrees)
+        geographic lattitude.
+    glon : numpy.ndarray (degrees)
+        geographic longitude.
+    year : int
+        year.
+    radius : float, optional
+        the radius from the centre of the earth to the points. The default is 6371.2e3 (Radius of Earth).
+
+    Returns
+    -------
+    numpy.ndarray (radians)
+        Declination used to rotate the magnetometer vectors.
+
+    """
     return declination(glat, glon, radius, year)
 
 def SM_Conversion(in_folder, out_folder=False):
+    """
+    Rotate the magnetometer data from SuperMAG local coordinates to magnetic coordinates using the CHAOS model
+    and merge the data sets into a HDF file
+
+    Parameters
+    ----------
+    in_folder : str
+        path to folder containing csv files that contain superMAG data. Ensure that all csv files within the folder contain superMAG data!
+    out_folder : str, optional
+        Specify a new path for the HDF file. The default is False which saves the HDF file within the same folder as the data.
+
+    Returns
+    -------
+    None.
+
+    """
     if not out_folder:
         out_folder= in_folder
     if not in_folder.endswith('/'):
