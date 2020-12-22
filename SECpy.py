@@ -282,7 +282,7 @@ def GridCheck(longitude, latitude, MagLon, MagLat, GridSpacing_km, limit=20, the
     Latitude : numpy.ndarray (Degrees)
         Latitude values of the poles that are problematic.
     Index: numpy.ndarray
-        Index of the position of the problem poles.
+        Index of the position of the problem poles. Index[0] is the problem measurements, Index[1] is the problem poles
 
     """
     print('Analysing grid')
@@ -294,8 +294,9 @@ def GridCheck(longitude, latitude, MagLon, MagLat, GridSpacing_km, limit=20, the
     else:
         print('Grid not optimal returning longitude and latitude values of the poles that are a problem and their index')
         I= np.where(GridSpacing_km *1e3 *limit/100>theta_prime*RE)
+        #I[0] is the problem measurements, I[1] is the problem poles
         return longitude[I[1]], latitude[I[1]], I
-def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, height, date=None, limit=20):
+def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, height, date=None, east=None, north=None, limit=20):
     """
     Parameters
     ----------
@@ -339,7 +340,8 @@ def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, 
     if bar:
         prog_bar = progressbar.ProgressBar(max_value=len(np.arange(-5,5,0.1))**2) 
         pbi=0
-    from apexpy import Apex
+    if date is not None:
+        from apexpy import Apex
     num_minimum=[]
     change=[]
     index=[]
@@ -363,10 +365,13 @@ def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, 
     print('Looking for grid improvements')
     for dc in np.arange(-5, 5, 0.1): 
          for d in np.arange(-5, 5, 0.1):
-             A = Apex(date=date)
-             f1, f2 = A.basevectors_qd(lat_centre+dc, lon_centre+d, 0, coords = 'geo')
-             qd_north = f2 / np.linalg.norm(f2)
-             East, North= qd_north[0], qd_north[1]
+             if date is not None:
+                 A = Apex(date=date)
+                 f1, f2 = A.basevectors_qd(lat_centre+dc, lon_centre+d, 0, coords = 'geo')
+                 qd_north = f2 / np.linalg.norm(f2)
+                 East, North= qd_north[0], qd_north[1]
+             else:
+                 East, North= east, north
              Gridproj= CS.CSprojection((lon_centre+d, lat_centre+dc), [East, North])
              node_grid=CS.CSgrid(Gridproj, height, length, GridSpacing_km, GridSpacing_km)
              node_lons, node_lats= node_grid.lon.flatten(), node_grid.lat.flatten()
