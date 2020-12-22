@@ -296,7 +296,7 @@ def GridCheck(longitude, latitude, MagLon, MagLat, GridSpacing_km, limit=20, the
         I= np.where(GridSpacing_km *1e3 *limit/100>theta_prime*RE)
         #I[0] is the problem measurements, I[1] is the problem poles
         return longitude[I[1]], latitude[I[1]], I
-def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, height, date=None, east=None, north=None, limit=20):
+def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, height, date=None, east=None, north=None, limit=20, movement_limit=5):
     """
     Parameters
     ----------
@@ -366,8 +366,8 @@ def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, 
             prog_bar.finish()
         return [None]*5
     print('Looking for grid improvements')
-    for dc in np.arange(-5, 5, 0.1): 
-         for d in np.arange(-5, 5, 0.1):
+    for dc in np.arange(-movement_limit, movement_limit, 0.1): 
+         for d in np.arange(-movement_limit, movement_limit, 0.1):
              if date is not None:
                  A = Apex(date=date)
                  f1, f2 = A.basevectors_qd(lat_centre+dc, lon_centre+d, 0, coords = 'geo')
