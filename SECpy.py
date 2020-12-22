@@ -347,10 +347,13 @@ def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, 
     index=[]
     # from pysymmetry.utils.CSgrid import CSgrid
     from pysymmetry.utils import cubedsphere as CS
-    A = Apex(date=date)
-    f1, f2 = A.basevectors_qd(lat_centre, lon_centre, 0, coords = 'geo')
-    qd_north = f2 / np.linalg.norm(f2)
-    East, North= qd_north[0], qd_north[1]
+    if date is not None:
+        A = Apex(date=date)
+        f1, f2 = A.basevectors_qd(lat_centre, lon_centre, 0, coords = 'geo')
+        qd_north = f2 / np.linalg.norm(f2)
+        East, North= qd_north[0], qd_north[1]
+    else:
+        East, North= east, north
     # node_grid= CSgrid((lon_centre, lat_centre), [East,North], height, length, GridSpacing_km, GridSpacing_km)
     Gridproj= CS.CSprojection((lon_centre, lat_centre), [East, North])
     node_grid=CS.CSgrid(Gridproj, height, length, GridSpacing_km, GridSpacing_km)
