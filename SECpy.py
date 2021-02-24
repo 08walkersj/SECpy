@@ -258,7 +258,7 @@ def Vdf(thetap, R, theta0= 0):
         return A*Current
     else:
         return A*((np.tan(thetap/2))**-1)
-def GridCheck(longitude, latitude, MagLon, MagLat, GridSpacing_km, limit=20, theta_prime=None):
+def GridCheck(longitude, latitude, MagLon, MagLat, GridSpacing_km, limit=20, evaluation_altitude=RE, theta_prime=None):
     """
     Parameters
     ----------
@@ -274,7 +274,8 @@ def GridCheck(longitude, latitude, MagLon, MagLat, GridSpacing_km, limit=20, the
         Average spacing between the poles in kilometers.
     limit : int/float, optional
         Percentage of the grid spacing that is the closest the SEC poles can be to magnetometers. The default is 20.
-
+    evaluation_altitude: int/float (kilometers)
+        Altitude of the evaluation points/ magnetometers. The default is RE.
     Returns
     -------
     Longitude : numpy.ndarray (Degrees)
@@ -288,15 +289,15 @@ def GridCheck(longitude, latitude, MagLon, MagLat, GridSpacing_km, limit=20, the
     print('Analysing grid')
     if theta_prime is None:
         theta_prime= theta(latitude, longitude, MagLat, MagLon)
-    if len(np.where(GridSpacing_km *1e3 *limit/100>theta_prime*RE)[0])==0:
+    if len(np.where(GridSpacing_km *1e3 *limit/100>theta_prime*evaluation_altitude)[0])==0:
         print('Grid within requirements')
         return [None]*3
     else:
         print('Grid not optimal returning longitude and latitude values of the poles that are a problem and their index')
-        I= np.where(GridSpacing_km *1e3 *limit/100>theta_prime*RE)
+        I= np.where(GridSpacing_km *1e3 *limit/100>theta_prime*evaluation_altitude)
         #I[0] is the problem measurements, I[1] is the problem poles
         return longitude[I[1]], latitude[I[1]], I
-def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, height, date=None, east=None, north=None, limit=20, movement_limit=5):
+def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, height, evaluation_altitude=RE, date=None, east=None, north=None, limit=20, movement_limit=5):
     """
     Parameters
     ----------
@@ -318,7 +319,8 @@ def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, 
         Date being used.
     limit : int/float, optional
         Percentage of grid spacing that will provide a limit of closeness of magnetometers with the pole nodes. The default is 20.
-
+    evaluation_altitude: int/float (kilometers)
+        Altitude of the evaluation points/ magnetometers. The default is RE.
     Returns
     -------
         Change: numpy.ndarray (Degrees)
@@ -359,8 +361,8 @@ def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, 
     node_grid=CS.CSgrid(Gridproj, height, length, GridSpacing_km, GridSpacing_km)
     node_lons, node_lats= node_grid.lon.flatten(), node_grid.lat.flatten() 
     thetap= theta(node_lats, node_lons, MagLat, MagLon)
-    print('\n number of problem poles initially ',len(np.where(GridSpacing_km* 1e3 *limit/100 > thetap*RE)[0]))
-    if len(np.where(GridSpacing_km* 1e3 *limit/100 > thetap*RE)[0])==0:
+    print('\n number of problem poles initially ',len(np.where(GridSpacing_km* 1e3 *limit/100 > thetap*evaluation_altitude)[0]))
+    if len(np.where(GridSpacing_km* 1e3 *limit/100 > thetap*evaluation_altitude)[0])==0:
         print('Grid already optimal')
         if bar:
             prog_bar.finish()
@@ -379,9 +381,9 @@ def ImproveGrid(lon_centre, lat_centre, MagLon, MagLat, GridSpacing_km, length, 
              node_grid=CS.CSgrid(Gridproj, height, length, GridSpacing_km, GridSpacing_km)
              node_lons, node_lats= node_grid.lon.flatten(), node_grid.lat.flatten()
              thetap= theta(node_lats, node_lons, MagLat, MagLon)
-             num_minimum.append(len(np.where(GridSpacing_km* 1e3 *limit/100 > thetap*RE)[0]))
+             num_minimum.append(len(np.where(GridSpacing_km* 1e3 *limit/100 > thetap*evaluation_altitude)[0]))
              change.append([d,dc])
-             index.append([np.where(GridSpacing_km* 1e3 *limit/100 > thetap*RE)])
+             index.append([np.where(GridSpacing_km* 1e3 *limit/100 > thetap*evaluation_altitude)])
              if bar:
                  pbi+=1
                  prog_bar.update(pbi)
