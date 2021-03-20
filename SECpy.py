@@ -125,7 +125,7 @@ def SinC(theta_P, thetap, phi_P, phi0):
     return A/B
 def Local2Global(theta_P, theta0, thetap, phi_P, phi0, VectorPhi, VectorTheta):
     #Based on a rotation of equation 2.17 and 2.18 (Vanhamäki 2020)
-    """
+    """CS
     Parameters
     ----------
     theta_P : numpy.ndarray (Radians)
@@ -258,6 +258,10 @@ def Vdf(thetap, R, theta0= 0):
         return A*Current
     else:
         return A*((np.tan(thetap/2))**-1)
+def RMSD(observed, modelled, N):
+    return np.sqrt(np.sum((observed-modelled)**2, axis=0)/N)
+def Performance_Parameter(observed, modelled, N):
+    return 1- RMSD(observed, modelled, N)/np.std(observed, axis=0)
 def GridCheck(longitude, latitude, MagLon, MagLat, GridSpacing_km, limit=20, evaluation_altitude=RE, theta_prime=None):
     """
     Parameters
