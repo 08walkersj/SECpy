@@ -258,6 +258,10 @@ def Vdf(thetap, R, theta0= 0):
         return A*Current
     else:
         return A*((np.tan(thetap/2))**-1)
+def RMSD(observed, modelled, N):
+    return np.sqrt(np.sum((observed-modelled)**2, axis=0)/N)
+def Performance_Parameter(observed, modelled, N):
+    return 1- RMSD(observed, modelled, N)/np.std(observed, axis=0)
 def GridCheck(longitude, latitude, MagLon, MagLat, GridSpacing_km, limit=20, evaluation_altitude=RE, theta_prime=None):
     """
     Parameters
