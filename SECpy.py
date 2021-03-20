@@ -7,6 +7,11 @@ The equations referenced in this module are from Vanhamäki, H., &
 Juusola, L. (2020). Introduction to Spherical Elementary Current Systems. 
 In Ionospheric Multi-Spacecraft Analysis Tools (pp. 5–33). Springer 
 International Publishing. https://doi.org/10.1007/978-3-030-26732-2_2
+Equations describing the performance parameter are in Marsal, S., Torta, J. M., 
+Segarra, A., & Araki, T. (2017). Use of spherical elementary currents to map 
+the polar current systems associated with the geomagnetic sudden commencements 
+on 2013 and 2015 St. Patrick’s Day storms. Journal of Geophysical Research: 
+Space Physics, 122(1), 194–211. https://doi.org/10.1002/2016JA023166
 @author: Simon Walker
 """
 
@@ -259,8 +264,42 @@ def Vdf(thetap, R, theta0= 0):
     else:
         return A*((np.tan(thetap/2))**-1)
 def RMSD(observed, modelled, N):
+    """
+    Find the root mean square difference between observed and modelled parameters
+
+    Parameters
+    ----------
+    observed : numpy.ndarray
+        Observed values.
+    modelled : numpy.ndarray
+        Modelled Values.
+    N : integer
+        Length of the data series.
+
+    Returns
+    -------
+    Root mean square difference: numpy.ndarray
+    """
     return np.sqrt(np.sum((observed-modelled)**2, axis=0)/N)
 def Performance_Parameter(observed, modelled, N):
+    """
+    Calculates the perfomance parameter of the SECS model, as outlined by equation 6 and 7 in Marsal(2017)
+
+    Parameters
+    ----------
+    observed : numpy.ndarray
+        Observed values.
+    modelled : numpy.ndarray
+        Modelled Values.
+    N : integer
+        Length of the data series.
+
+    Returns
+    -------
+    P^i_j: numpy.ndarray
+        The performance parameter of a component.
+
+    """
     return 1- RMSD(observed, modelled, N)/np.std(observed, axis=0)
 def GridCheck(longitude, latitude, MagLon, MagLat, GridSpacing_km, limit=20, evaluation_altitude=RE, theta_prime=None):
     """
@@ -552,7 +591,7 @@ class SECS:
             of this is to create a second set of poles in the ground at the location of the 
             telluric currents to adjust the model for their influence on the magnetometer measurements.
             
-            'image'→ which uses the method described in Juusola, L., Kauristie, K., Vanhamäki, H., 
+            'image'→ which uses the method described in "Juusola, L., Kauristie, K., Vanhamäki, H., 
             Aikio, A., & van de Kamp, M. (2016). Comparison of auroral ionospheric and field-aligned 
             currents derived from Swarm and ground magnetic field measurements. Journal of Geophysical 
             Research A: Space Physics, 121(9), 9256–9283. https://doi.org/10.1002/2016JA022961" 
@@ -1038,7 +1077,9 @@ class SECS:
         """
         try:
             #Calculate the amplitudes of the SEC pole(s)
-            m= np.dot(self.fitting_matrix, np.concatenate((Btheta, Bphi, Br)).T)
+            m= np.dot(self.fitting_matrix, np.concatenate((Btheta, Bphi, Br),axis=Btheta.ndim-1).T)
+            if Btheta.ndim==2:
+                m= m.T
         except AttributeError:
             raise ModelError('Fitting matrix could not be found ensure you have successfully run the "Fitting_Matrix" function or assigned a "fitting_matrix" as an attribute to this class')
         if eval_longitude is None and eval_latitude is None:
@@ -1066,14 +1107,13 @@ class SECS:
                     telluric_eval_theta_prime= theta(self.telluric_pole_latitude, self.telluric_pole_longitude, eval_latitude, eval_longitude)
         if self.mode=='default':
             try: 
-                self.pole_longitude
                 #Radial component of the magnetic field at the evaluation point(s)
-                Br=m*BrDF(eval_theta_prime, eval_radius, self.R)
+                Br= np.dot(m, BrDF(eval_theta_prime,eval_radius, self.R).T)
                 #North and east component of the magnetic field at the evaluation point(s)
-                Bn, Be= Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
-                   Deg2Rad(eval_longitude), 0, m*BthetaDF(eval_theta_prime, eval_radius, self.R))
+                Bn, Be= np.dot(m, np.transpose(Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
+                   Deg2Rad(eval_longitude), 0, BthetaDF(eval_theta_prime, eval_radius, self.R)), (0,2,1)))
                 
-                return  np.sum(Br, 1), np.sum(Be, 1), np.sum(-Bn, 1)
+                return  Br, Be, -Bn
             except AttributeError:
                 #Radial component of the ionospheric contribution to the magnetic field at the evaluation point(s)
                 Br= m[:len(self.ionospheric_pole_latitude)]*BrDF(ionospheric_eval_theta_prime, eval_radius, self.R)
@@ -1088,16 +1128,22 @@ class SECS:
                 return (np.sum(Br, 1), np.sum(Be, 1), np.sum(-Bn, 1)), (np.sum(Br2, 1), np.sum(Be2, 1), np.sum(-Bn2, 1))
         elif self.mode=='image':
             #Radial component of the ionospheric contribution to the magnetic field at the evaluation point(s)
-            Br= m*BrDF(eval_theta_prime, eval_radius, self.R)
+            Br= np.dot(m, BrDF(eval_theta_prime,eval_radius, self.R).T)
+            n, e= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+               Deg2Rad(eval_longitude), 0, BthetaDF(eval_theta_prime, eval_radius, self.R))
             #North and east component of the ionospheric contribution to the magnetic field at the evaluation point(s)
-            Bn, Be= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-               Deg2Rad(eval_longitude), 0, m*BthetaDF(eval_theta_prime, eval_radius, self.R))
+            Bn, Be= np.dot(m, n.T), np.dot(m, e.T)
+            # Bn, Be= np.dot(m, np.transpose(Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+            #    Deg2Rad(eval_longitude), 0, BthetaDF(eval_theta_prime, eval_radius, self.R)), (0,2,1)))
             #Radial component of the telluric contribution to the magnetic field at the evaluation point(s)
-            Br2= (-self.R/self.Rc)*m*BrDF(eval_theta_prime, eval_radius, (self.Rc**2)/self.R)
+            Br2= np.dot((-self.R/self.Rc)*m, BrDF(eval_theta_prime, eval_radius, (self.Rc**2)/self.R).T)
             #North and east component of the telluric contribution to the magnetic field at the evaluation point(s)
-            Bn2, Be2= Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
-               Deg2Rad(eval_longitude), 0, (-self.R/self.Rc)*m*BthetaDF(eval_theta_prime, eval_radius, (self.Rc**2)/self.R))
-            return (np.sum(Br, 1), np.sum(Be, 1), np.sum(-Bn, 1)), (np.sum(Br2, 1), np.sum(Be2, 1), np.sum(-Bn2, 1))
+            n2, e2= Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
+               Deg2Rad(eval_longitude), 0, BthetaDF(eval_theta_prime, eval_radius, (self.Rc**2)/self.R))
+            Bn2, Be2= np.dot((-self.R/self.Rc)*m, n2.T), np.dot((-self.R/self.Rc)*m,e2.T)
+            # Bn2, Be2= np.dot((-self.R/self.Rc)*m, np.transpose(Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
+            #    Deg2Rad(eval_longitude), 0, BthetaDF(eval_theta_prime, eval_radius, (self.Rc**2)/self.R)), (0,2,1)))
+            return ((Br, Be, -Bn, ), (Br2, Be2, -Bn2))
         else:
             raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
     def Currents(self, Btheta, Bphi, Br, eval_radius=None, eval_longitude=None, eval_latitude=None, singularity_limit=0):
@@ -1204,6 +1250,50 @@ class SECS:
                 return np.dot(self.fitting_matrix, np.concatenate((Btheta, Bphi, Br)).T)[:len(self.ionospheric_pole_latitude)], np.dot(self.fitting_matrix, np.concatenate((Btheta, Bphi, Br)).T)[len(self.ionospheric_pole_latitude):]
         else:
             raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
+    def Performance_Parameter(self, Btheta, Bphi, Br, Magnetometer_Longitude, Magnetometer_Latitude):
+        """
+        Calculates the performance parameter for each component at each magnetometer site as specified by equation 6 and 7 in Marsal(2017)
+        Parameters
+        ----------
+        Btheta : numpy.ndarray (Tesla)
+            Measured values of Btheta at each magnetometer for the time series that will be analysed.
+            Array must be in the shape (N, M) where N is the length of the time series and M is the number of magnetometers.
+        Bphi : numpy.ndarray (Tesla)
+            Measured values of Bphi at each magnetometer for the time series that will be analysed.
+            Array must be in the shape (N, M) where N is the length of the time series and M is the number of magnetometers.
+        Br : numpy.ndarray (Tesla)
+            Measured values of Br at each magnetometer for the time series that will be analysed.
+            Array must be in the shape (N, M) where N is the length of the time series and M is the number of magnetometers.
+        MMgnetometer_Longitude : numpy.ndarray (Degrees)
+            Longitude position of the magnetometer(s).
+        Magnetometer_Latitude : numpy.ndarray (Degrees)
+            Latitude position of the magnetometer(s).
+
+        Returns
+        -------
+        Pr : numpy.ndarray
+            Performance paramemeter for the radial component of the magnetic field at each magnetometer.
+        Pe : numpy.ndarray
+            Performance paramemeter for the east component of the magnetic field at each magnetometer.
+        Pn : numpy.ndarray
+            Performance paramemeter for the north component of the magnetic field at each magnetometer.
+
+        """
+        if hasattr(self,'ionospheric_pole_latitude'):
+            (Bu, Be, Bn), (Br2, Be2, Bn2)= self.Magnetic_Field(Btheta, Bphi, Br, 
+                                        eval_longitude=Magnetometer_Longitude, 
+                                        eval_latitude= Magnetometer_Latitude)
+            Bu= Br+Br2
+            Be= Be+Be2
+            Bn= Bn+Bn2
+        else:
+            Bu, Be, Bn= self.Magnetic_Field(Btheta, Bphi, Br, 
+                                            eval_longitude=Magnetometer_Longitude, 
+                                            eval_latitude= Magnetometer_Latitude)
+        return Performance_Parameter(Br, Bu, len(Br)), Performance_Parameter(Bphi, Be, len(Bphi)), Performance_Parameter(Btheta, Bn, len(Btheta))
+        
+        
+        
 
 """Working Example"""
 if __name__== '__main__':
