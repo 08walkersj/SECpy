@@ -1283,14 +1283,14 @@ class SECS:
             (Bu, Be, Bn), (Br2, Be2, Bn2)= self.Magnetic_Field(Btheta, Bphi, Br, 
                                         eval_longitude=Magnetometer_Longitude, 
                                         eval_latitude= Magnetometer_Latitude)
-            Bu= Br+Br2
+            Bu= Bu+Br2
             Be= Be+Be2
             Bn= Bn+Bn2
         else:
             Bu, Be, Bn= self.Magnetic_Field(Btheta, Bphi, Br, 
                                             eval_longitude=Magnetometer_Longitude, 
                                             eval_latitude= Magnetometer_Latitude)
-        return Performance_Parameter(Br, Bu, len(Br)), Performance_Parameter(Bphi, Be, len(Bphi)), Performance_Parameter(Btheta, Bn, len(Btheta))
+        return Performance_Parameter(Br, Bu, len(Br)), Performance_Parameter(Bphi, Be, len(Bphi)), Performance_Parameter(-Btheta, Bn, len(Btheta))
         
         
         
