@@ -20,7 +20,6 @@ Space Physics, 122(1), 194–211. https://doi.org/10.1002/2016JA023166
 import numpy as np
 
 """Useful Constants"""
-pi = np.pi
 RE= 6.371E6
 u0= 1.23E-6
 
@@ -44,7 +43,7 @@ def Deg2Rad(angle):
         Angle in radians.
     """
     
-    return angle*(pi/180)
+    return angle*(np.pi/180)
 def Rad2Deg(angle):
     """
     Parameters
@@ -57,7 +56,7 @@ def Rad2Deg(angle):
     angle : input format (Degrees)
         Angle in degrees.
     """
-    return angle*(180/pi)
+    return angle*(180/np.pi)
 def theta(lat_value, long_value, latitude, longitude):
     #Equation 2.16 (Vanhamäki 2020)
     """
@@ -162,6 +161,8 @@ def Local2Global(theta_P, theta0, thetap, phi_P, phi0, VectorPhi, VectorTheta):
     new_VectorTheta= VectorTheta*CosC_ + VectorPhi*SinC_
     new_VectorPhi=-VectorTheta*SinC_ + VectorPhi*CosC_
     return new_VectorTheta, new_VectorPhi
+
+"""Magnetic Field"""
 def BrDF(thetap, r, R):
     #Equation 2.13 (Vanhamäki 2020)
     """
@@ -188,7 +189,7 @@ def BrDF(thetap, r, R):
         point(s) due to the SEC pole(s) in the "local" SEC pole system(s).
     """
     s= min([r,R])/max([r,R])
-    A= u0/(4*pi*r)
+    A= u0/(4*np.pi*r)
     if r<R:
         B= (1+ s**2 -2*s*np.cos(thetap))**-0.5
         B-=1
@@ -224,7 +225,7 @@ def BthetaDF(thetap, r, R):
         point(s) due to the SEC pole(s) in the "local" SEC pole system(s).
     """
     s= min([r,R])/max([r,R])
-    A= -u0/(4*pi*r*np.sin(thetap))
+    A= -u0/(4*np.pi*r*np.sin(thetap))
     if r<R:
         B= (s-np.cos(thetap))*(1+ s**2 -2*s*np.cos(thetap))**-0.5
         B+= np.cos(thetap)
@@ -234,8 +235,42 @@ def BthetaDF(thetap, r, R):
     else:
         raise ValueError('Invalid radius inputs cannot be equal')
     return A*B
-def Vdf(thetap, R, theta0= 0):
-    #Equation 2.8 (Vanhamäki 2020)
+def BphiCF(thetap, r, R):
+    #Equation 2.15 (Vanhamäki 2020)
+    """
+    Parameters
+    ----------
+    thetap : numpy.ndarray (Radians)
+        Theta prime, the colatitude of the evaluation point(s) from the SEC pole(s).
+    r : float (Meters)
+        Radial distance from the centre of the Earth to the evaluation point(s).
+    R : float (Meters)
+        Radial distance from the centre of the Earth to the SEC pole(s)/ ionospheric layer.
+
+    Raises
+    ------
+    ValueError
+        Error if you try to evaluate the magnetic field at the radius of the SEC pole(s) 
+        as there shouldn't be a reason to do this.
+
+    Returns
+    -------
+    Matrix : numpy.ndarray (Tesla)
+        When the matrix is multiplied by the SEC pole amplitude(s)/ 
+        scalar(s) will give the phi component of the magnetic field at the evaluation 
+        point(s) due to the SEC pole(s) in the "local" SEC pole system(s).
+    """
+    if r< R:
+        return thetap*0
+    elif r>R:
+        A= -u0*(4*np.pi*r)
+        B= np.tan(thetap/2)
+        return A*B**-1
+    else:
+        raise ValueError('Invalid radius inputs cannot be equal')
+        
+
+def V(thetap, R, theta0= 0):
     """
     Parameters
     ----------
@@ -250,12 +285,17 @@ def Vdf(thetap, R, theta0= 0):
     Returns
     -------
     Current : numpy.ndarray (Amps)
-        Divergence free current around the SEC pole system(s) due 
-        to its nature only in the theta unit vector direction in 
-        the local co-ordinate system and only once multiplied by the SEC pole amplitude(s).
+        → For Divergence-free SECS:
+            Divergence-free current around the SEC pole system(s) due 
+            to its nature only in the phi unit vector direction in 
+            the local co-ordinate system and only once multiplied by the SEC pole amplitude(s).
+        → For Curl-free SECS:
+            Curl-free current around the SEC pole system(s) due 
+            to its nature only in the theta unit vector direction in 
+            the local co-ordinate system and only once multiplied by the SEC pole amplitude(s).
     """
-
-    A= 1/(4*pi*R)
+    #Equation 2.7/2.8 2.43/2.44 (Vanhamäki 2020)
+    A= 1/(4*np.pi*R)
     if theta0>0:
         Current= np.zeros(thetap.shape)
         Current[thetap<theta0]= np.tan(thetap[thetap<theta0]/2)*(np.tan(theta0/2))**-2
@@ -684,7 +724,7 @@ class SECS:
                 self.eval_theta_prime=theta(self.ionospheric_pole_latitude, self.ionospheric_pole_longitude, eval_latitude, eval_longitude)
             else:
                 raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
-    def Fitting_Matrix(self, magnetometer_longitude, magnetometer_latitude, cond=0.05**2, eval_radius= RE):
+    def Fitting_Matrix(self, magnetometer_longitude, magnetometer_latitude, cond=0.05**2, eval_radius= RE, system='divergence-free'):
         """
         Parameters
         ----------
@@ -733,33 +773,63 @@ class SECS:
                 raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
         #Calculate the magnetic field at the magnetometer locations with pole amplitude(s) of value 1
         try:
-            G= np.zeros((3*len(magnetometer_latitude), len(self.pole_latitude)))
-            G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=BrDF(self.theta_prime, eval_radius, self.R)
-            G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.pole_longitude), 
-                       Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.theta_prime, eval_radius, self.R))
+            if system.lower()=='divergence-free':
+                G= np.zeros((3*len(magnetometer_latitude), len(self.pole_latitude)))
+                G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=BrDF(self.theta_prime, eval_radius, self.R)
+                G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.pole_longitude), 
+                           Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.theta_prime, eval_radius, self.R))
+            elif system.lower()=='curl-free':
+                G= np.zeros((3*len(magnetometer_latitude), len(self.pole_latitude)))
+                G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=np.zeros(magnetometer_latitude.shape)
+                G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.pole_longitude), 
+                           Deg2Rad(magnetometer_longitude), BphiCF(self.theta_prime, eval_radius, self.R), 0)
+            else:
+                raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
         except AttributeError:
             if self.mode=='default':
-                G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)+len(self.telluric_pole_latitude)))
-                #Ionospheric and telluric Br
-                G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=np.append(BrDF(self.ionospheric_theta_prime, eval_radius, self.R), BrDF(self.telluric_theta_prime, eval_radius, self.Rc), axis=1)
-                #Ionospheric Btheta and Bphi
-                Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.ionospheric_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                       Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.ionospheric_theta_prime, eval_radius, self.R))
-                #Telluric Btheta and Bphi
-                Gn2, Ge2= Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.telluric_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
-                       Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.telluric_theta_prime, eval_radius, self.Rc))
-                G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = np.append(Gn, Gn2, axis=1), np.append(Ge, Ge2, axis=1)
+                if system.lower()=='divergence-free':
+                    G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)+len(self.telluric_pole_latitude)))
+                    #Ionospheric and telluric Br
+                    G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=np.append(BrDF(self.ionospheric_theta_prime, eval_radius, self.R), BrDF(self.telluric_theta_prime, eval_radius, self.Rc), axis=1)
+                    #Ionospheric Btheta and Bphi
+                    Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.ionospheric_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                           Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.ionospheric_theta_prime, eval_radius, self.R))
+                    #Telluric Btheta and Bphi
+                    Gn2, Ge2= Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.telluric_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
+                           Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.telluric_theta_prime, eval_radius, self.Rc))
+                    G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = np.append(Gn, Gn2, axis=1), np.append(Ge, Ge2, axis=1)
+                elif system.lower()=='curl-free':
+                    G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)))
+                    G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=np.zeros(magnetometer_latitude.shape)
+                    #Ionospheric Btheta and Bphi
+                    Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.ionospheric_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                           Deg2Rad(magnetometer_longitude), BphiCF(self.ionospheric_theta_prime, eval_radius, self.R), 0)
+                    #Telluric Btheta and Bphi
+                    G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn, Ge
+                else:
+                    raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
             elif self.mode=='image':
-                G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)))
-                #Ionospheric and telluric Br
-                G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=BrDF(self.theta_prime, eval_radius, self.R) -(self.R/self.Rc)* BrDF(self.theta_prime, eval_radius, (self.Rc**2)/self.R)
-                #Ionospheric Btheta and Bphi
-                Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                             Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.theta_prime, eval_radius, self.R))
-                #Telluric Btheta and Bphi
-                Gn2, Ge2= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                             Deg2Rad(magnetometer_longitude), 0, -(self.R/self.Rc)*BthetaDF(self.theta_prime, eval_radius, (self.Rc**2)/self.R))
-                G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn+Gn2, Ge+Ge2
+                if system.lower()=='divergence-free':
+                    G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)))
+                    #Ionospheric and telluric Br
+                    G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=BrDF(self.theta_prime, eval_radius, self.R) -(self.R/self.Rc)* BrDF(self.theta_prime, eval_radius, (self.Rc**2)/self.R)
+                    #Ionospheric Btheta and Bphi
+                    Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                 Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.theta_prime, eval_radius, self.R))
+                    #Telluric Btheta and Bphi
+                    Gn2, Ge2= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                 Deg2Rad(magnetometer_longitude), 0, -(self.R/self.Rc)*BthetaDF(self.theta_prime, eval_radius, (self.Rc**2)/self.R))
+                    G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn+Gn2, Ge+Ge2
+                elif system.lower()=='curl-free':
+                    G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)))
+                    #Ionospheric and telluric Br
+                    G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=np.zeros(magnetometer_latitude.shape)
+                    #Ionospheric Btheta and Bphi
+                    Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                 Deg2Rad(magnetometer_longitude), BphiCF(self.theta_prime, eval_radius, self.R), 0)
+                    G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn, Ge
+                else:
+                    raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
             else:
                 raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
         from scipy.linalg import svd, inv
@@ -780,7 +850,7 @@ class SECS:
         #Calculating fitting matrix when multiplied by the magnetometer data will give the SEC pole amplitude(s)
         self.fitting_matrix= np.dot(invG, G.T)
         return G, invG
-    def G_Matrix(self, magnetometer_longitude, magnetometer_latitude, eval_radius= RE):
+    def G_Matrix(self, magnetometer_longitude, magnetometer_latitude, eval_radius= RE, system='divergence-free'):
         """
         Parameters
         ----------
@@ -818,36 +888,63 @@ class SECS:
         #Calculate the magnetic field at the magnetometer locations with pole amplitude(s) of value 1
         try:
             G= np.zeros((3*len(magnetometer_latitude), len(self.pole_latitude)))
-            G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=BrDF(self.theta_prime, eval_radius, self.R)
-            G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.pole_longitude), 
-                       Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.theta_prime, eval_radius, self.R))
+            if system.lower()== 'divergence-free':
+                G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=BrDF(self.theta_prime, eval_radius, self.R)
+                G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.pole_longitude), 
+                           Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.theta_prime, eval_radius, self.R))
+            elif system.lower()=='curl-free':
+                G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=np.zeros(magnetometer_latitude.shape)
+                G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.pole_longitude), 
+                           Deg2Rad(magnetometer_longitude), BphiCF(self.theta_prime, eval_radius, self.R), 0)
+            else:
+                raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
+
         except AttributeError:
             if self.mode=='default':
-                G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)+len(self.telluric_pole_latitude)))
-                #Ionospheric and telluric Br
-                G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=np.append(BrDF(self.ionospheric_theta_prime, eval_radius, self.R), BrDF(self.telluric_theta_prime, eval_radius, self.Rc), axis=1)
-                #Ionospheric Btheta and Bphi
-                Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.ionospheric_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                       Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.ionospheric_theta_prime, eval_radius, self.R))
-                #Telluric Btheta and Bphi
-                Gn2, Ge2= Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.telluric_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
-                       Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.telluric_theta_prime, eval_radius, self.Rc))
-                G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = np.append(Gn, Gn2, axis=1), np.append(Ge, Ge2, axis=1)
+                if system.lower()=='divergence-free':
+                    G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)+len(self.telluric_pole_latitude)))
+                    #Ionospheric and telluric Br
+                    G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=np.append(BrDF(self.ionospheric_theta_prime, eval_radius, self.R), BrDF(self.telluric_theta_prime, eval_radius, self.Rc), axis=1)
+                    #Ionospheric Btheta and Bphi
+                    Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.ionospheric_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                           Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.ionospheric_theta_prime, eval_radius, self.R))
+                    #Telluric Btheta and Bphi
+                    Gn2, Ge2= Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.telluric_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
+                           Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.telluric_theta_prime, eval_radius, self.Rc))
+                    G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = np.append(Gn, Gn2, axis=1), np.append(Ge, Ge2, axis=1)
+                elif system.lower()=='curl-free':
+                    G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)))
+                    G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=np.zeros(magnetometer_latitude.shape)
+                    Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.ionospheric_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                           Deg2Rad(magnetometer_longitude), BphiCF(self.ionospheric_theta_prime, eval_radius, self.R), 0)
+                    G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn, Ge
+                else:
+                    raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
+
             elif self.mode=='image':
-                G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)))
-                #Ionospheric and telluric Br
-                G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=BrDF(self.theta_prime, eval_radius, self.R) -(self.R/self.Rc)* BrDF(self.theta_prime, eval_radius, (self.Rc**2)/self.R)
-                #Ionospheric Btheta and Bphi
-                Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                             Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.theta_prime, eval_radius, self.R))
-                #Telluric Btheta and Bphi
-                Gn2, Ge2= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                             Deg2Rad(magnetometer_longitude), 0, -(self.R/self.Rc)*BthetaDF(self.theta_prime, eval_radius, (self.Rc**2)/self.R))
-                G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn+Gn2, Ge+Ge2
+                if system.lower()=='divergence-free':
+                    G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)))
+                    #Ionospheric and telluric Br
+                    G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=BrDF(self.theta_prime, eval_radius, self.R) -(self.R/self.Rc)* BrDF(self.theta_prime, eval_radius, (self.Rc**2)/self.R)
+                    #Ionospheric Btheta and Bphi
+                    Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                 Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.theta_prime, eval_radius, self.R))
+                    #Telluric Btheta and Bphi
+                    Gn2, Ge2= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                 Deg2Rad(magnetometer_longitude), 0, -(self.R/self.Rc)*BthetaDF(self.theta_prime, eval_radius, (self.Rc**2)/self.R))
+                    G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn+Gn2, Ge+Ge2
+                elif system.lower()=='curl-free':
+                    G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)))
+                    G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=np.zeros(magnetometer_latitude.shape)
+                    Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                 Deg2Rad(magnetometer_longitude), BphiCF(self.theta_prime, eval_radius, self.R), 0)
+                    G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn, Ge
+                else:
+                    raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
             else:
                 raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
         return G
-    def eval_G_Matrix_B(self, eval_radius= RE, eval_longitude=None, eval_latitude=None):
+    def eval_G_Matrix_B(self, eval_radius= RE, eval_longitude=None, eval_latitude=None, system='divergence-free'):
         """
         When multiplied by the SEC pole amplitudes these matrices will return the magnetic field at the evaluation points.
 
@@ -903,42 +1000,70 @@ class SECS:
                     ionospheric_eval_theta_prime= theta(self.ionospheric_pole_latitude, self.ionospheric_pole_longitude, eval_latitude, eval_longitude)
                     telluric_eval_theta_prime= theta(self.telluric_pole_latitude, self.telluric_pole_longitude, eval_latitude, eval_longitude)
         if self.mode=='default':
-            try: 
+            try:
                 self.pole_longitude
-                #Radial component of the magnetic field at the evaluation point(s)
-                GBr=BrDF(eval_theta_prime, eval_radius, self.R)
-                #North and east component of the magnetic field at the evaluation point(s)
-                GBn, GBe= Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
-                   Deg2Rad(eval_longitude), 0, BthetaDF(eval_theta_prime, eval_radius, self.R))
+                if system.lower()== 'divergence-free':
+                    #Radial component of the magnetic field at the evaluation point(s)
+                    GBr=BrDF(eval_theta_prime, eval_radius, self.R)
+                    #North and east component of the magnetic field at the evaluation point(s)
+                    GBn, GBe= Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
+                       Deg2Rad(eval_longitude), 0, BthetaDF(eval_theta_prime, eval_radius, self.R))
                 
-                return  GBr, GBe, GBn
+                    return  GBr, GBe, -GBn
+                elif system.lower()== 'curl-free':
+                    #Radial component of the magnetic field at the evaluation point(s)
+                    GBr=np.zeros(eval_longitude.shape)
+                    #North and east component of the magnetic field at the evaluation point(s)
+                    GBn, GBe= Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
+                       Deg2Rad(eval_longitude), BphiCF(eval_theta_prime, eval_radius, self.R), 0)
+                
+                    return  GBr, GBe, -GBn
+                else:
+                    raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
             except AttributeError:
-                #Radial component of the ionospheric contribution to the magnetic field at the evaluation point(s)
-                GBr= BrDF(ionospheric_eval_theta_prime, eval_radius, self.R)
-                #North and east component of the ionospheric contribution to the magnetic field at the evaluation point(s)
-                GBn, GBe= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), ionospheric_eval_theta_prime, 
-                                     Deg2Rad(self.ionospheric_pole_longitude), Deg2Rad(eval_longitude), 0, BthetaDF(ionospheric_eval_theta_prime, eval_radius, self.R))
-                #Radial component of the telluric contribution to the magnetic field at the evaluation point(s)
-                GBr2= BrDF(telluric_eval_theta_prime, eval_radius, self.Rc)
-                #North and east component of the telluric contribution to the magnetic field at the evaluation point(s)            
-                GBn2, GBe2= Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- eval_latitude), telluric_eval_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
-                   Deg2Rad(eval_longitude), 0, BthetaDF(telluric_eval_theta_prime, eval_radius, self.Rc))
-                return (GBr, GBe, -GBn), (GBr2, GBe2, -GBn2)
+                if system.lower()=='divergence-free':
+                    #Radial component of the ionospheric contribution to the magnetic field at the evaluation point(s)
+                    GBr= BrDF(ionospheric_eval_theta_prime, eval_radius, self.R)
+                    #North and east component of the ionospheric contribution to the magnetic field at the evaluation point(s)
+                    GBn, GBe= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), ionospheric_eval_theta_prime, 
+                                         Deg2Rad(self.ionospheric_pole_longitude), Deg2Rad(eval_longitude), 0, BthetaDF(ionospheric_eval_theta_prime, eval_radius, self.R))
+                    #Radial component of the telluric contribution to the magnetic field at the evaluation point(s)
+                    GBr2= BrDF(telluric_eval_theta_prime, eval_radius, self.Rc)
+                    #North and east component of the telluric contribution to the magnetic field at the evaluation point(s)            
+                    GBn2, GBe2= Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- eval_latitude), telluric_eval_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
+                       Deg2Rad(eval_longitude), 0, BthetaDF(telluric_eval_theta_prime, eval_radius, self.Rc))
+                    return (GBr, GBe, -GBn), (GBr2, GBe2, -GBn2)
+                elif system.lower()=='curl-free':
+                    #Radial component of the ionospheric contribution to the magnetic field at the evaluation point(s)
+                    GBr= np.zeros(eval_longitude.shape)
+                    #North and east component of the ionospheric contribution to the magnetic field at the evaluation point(s)
+                    GBn, GBe= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), ionospheric_eval_theta_prime, 
+                                         Deg2Rad(self.ionospheric_pole_longitude), Deg2Rad(eval_longitude), BphiCF(ionospheric_eval_theta_prime, eval_radius, self.R), 0)
+                else:
+                    raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
         elif self.mode=='image':
-            #Radial component of the ionospheric contribution to the magnetic field at the evaluation point(s)
-            GBr= BrDF(eval_theta_prime, eval_radius, self.R)
-            #North and east component of the ionospheric contribution to the magnetic field at the evaluation point(s)
-            GBn, GBe= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-               Deg2Rad(eval_longitude), 0, BthetaDF(eval_theta_prime, eval_radius, self.R))
-            #Radial component of the telluric contribution to the magnetic field at the evaluation point(s)
-            GBr2= (-self.R/self.Rc)*BrDF(eval_theta_prime, eval_radius, (self.Rc**2)/self.R)
-            #North and east component of the telluric contribution to the magnetic field at the evaluation point(s)
-            GBn2, GBe2= Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
-               Deg2Rad(eval_longitude), 0, (-self.R/self.Rc)*BthetaDF(eval_theta_prime, eval_radius, (self.Rc**2)/self.R))
-            return (GBr, GBe, -GBn), (GBr2, GBe2, -GBn2)
+            if system.lower()=='divergence-free':
+                #Radial component of the ionospheric contribution to the magnetic field at the evaluation point(s)
+                GBr= BrDF(eval_theta_prime, eval_radius, self.R)
+                #North and east component of the ionospheric contribution to the magnetic field at the evaluation point(s)
+                GBn, GBe= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                   Deg2Rad(eval_longitude), 0, BthetaDF(eval_theta_prime, eval_radius, self.R))
+                #Radial component of the telluric contribution to the magnetic field at the evaluation point(s)
+                GBr2= (-self.R/self.Rc)*BrDF(eval_theta_prime, eval_radius, (self.Rc**2)/self.R)
+                #North and east component of the telluric contribution to the magnetic field at the evaluation point(s)
+                GBn2, GBe2= Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
+                   Deg2Rad(eval_longitude), 0, (-self.R/self.Rc)*BthetaDF(eval_theta_prime, eval_radius, (self.Rc**2)/self.R))
+                return (GBr, GBe, -GBn), (GBr2, GBe2, -GBn2)
+            elif system.lower()=='curl-free':
+                #Radial component of the ionospheric contribution to the magnetic field at the evaluation point(s)
+                GBr= np.zeros(eval_longitude.shape)
+                #North and east component of the ionospheric contribution to the magnetic field at the evaluation point(s)
+                GBn, GBe= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                   Deg2Rad(eval_longitude), BphiCF(eval_theta_prime, eval_radius, self.R), 0)
+                return GBr, GBe, -GBn
         else:
             raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
-    def eval_G_Matrix_J(self, eval_radius=None, eval_longitude=None, eval_latitude=None, singularity_limit=0):
+    def eval_G_Matrix_J(self, eval_radius=None, eval_longitude=None, eval_latitude=None, singularity_limit=0, system='divergence-free'):
         """
         
 
@@ -952,9 +1077,11 @@ class SECS:
             Longitude position of the evaluation point(s). The default is set by user in set up.
         eval_latitude : numpy.ndarray (Degrees)
             Latitude position of the evaluation point(s). The default is set by user in set up.
-        singularity_limit : TYPE, optional
+        singularity_limit : float, optional
             Limit that signifies a change in formula close to the formula close to the SEC pole. The method is based on equations 2.44 from Vanhamäki 2020.
             The default is 0.
+        system: string
+            Specifies the system type either divergence-free or curl-free
 
         Raises
         ------
@@ -989,22 +1116,45 @@ class SECS:
                 eval_theta_prime= theta(self.ionospheric_pole_latitude, self.ionospheric_pole_longitude, eval_latitude, eval_longitude)
         try:
             #North and east component of the current at the evaluation point(s)
-            GCn, GCe=Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
-                                Deg2Rad(eval_longitude), Vdf(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
-            return GCe, -GCn
+            if system.lower()=='divergence-free':
+                GCn, GCe=Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
+                                    Deg2Rad(eval_longitude), V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
+                return GCe, -GCn
+            elif system.lower()=='curl-free':
+                GCn, GCe=Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
+                                    Deg2Rad(eval_longitude),0, V(eval_theta_prime, eval_radius, theta0= singularity_limit))
+                return GCe, -GCn
+            else:
+                raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
         except AttributeError:
-            if self.mode=='default':
-                #North and east component of the current at the evaluation point(s)
-                GCn, GCe=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                                    Deg2Rad(eval_longitude), Vdf(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
-                return GCe, -GCn
-            elif self.mode=='image':
-                #North and east component of the current at the evaluation point(s)
-                GCn, GCe=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                                    Deg2Rad(eval_longitude), Vdf(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
-                return GCe, -GCn
-        else:
-            raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
+            if system.lower()=='divergence-free':
+                if self.mode=='default':
+                    #North and east component of the current at the evaluation point(s)
+                    GCn, GCe=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                        Deg2Rad(eval_longitude), V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
+                    return GCe, -GCn
+                elif self.mode=='image':
+                    #North and east component of the current at the evaluation point(s)
+                    GCn, GCe=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                        Deg2Rad(eval_longitude), V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
+                    return GCe, -GCn
+                else:
+                    raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
+            elif system.lower()=='curl-free':
+                if self.mode=='default':
+                    #North and east component of the current at the evaluation point(s)
+                    GCn, GCe=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                        Deg2Rad(eval_longitude), 0, V(eval_theta_prime, eval_radius, theta0= singularity_limit))
+                    return GCe, -GCn
+                elif self.mode=='image':
+                    #North and east component of the current at the evaluation point(s)
+                    GCn, GCe=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                        Deg2Rad(eval_longitude), 0, V(eval_theta_prime, eval_radius, theta0= singularity_limit))
+                    return GCe, -GCn
+                else:
+                    raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
+            else:
+                raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
     def Inverse_Matrix(self, matrix, cond=0.05**2):
         """
         Parameters
@@ -1205,18 +1355,18 @@ class SECS:
         try:
             #North and east component of the current at the evaluation point(s)
             Cn, Ce=Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
-                                Deg2Rad(eval_longitude), m*Vdf(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
+                                Deg2Rad(eval_longitude), m*V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
             return np.sum(Ce, 1), np.sum(-Cn, 1)
         except AttributeError:
             if self.mode=='default':
                 #North and east component of the current at the evaluation point(s)
                 Cn, Ce=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                                    Deg2Rad(eval_longitude), m[:len(self.ionospheric_pole_latitude)]*Vdf(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
+                                    Deg2Rad(eval_longitude), m[:len(self.ionospheric_pole_latitude)]*V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
                 return np.sum(Ce, 1), np.sum(-Cn, 1)
             elif self.mode=='image':
                 #North and east component of the current at the evaluation point(s)
                 Cn, Ce=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                                    Deg2Rad(eval_longitude), m*Vdf(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
+                                    Deg2Rad(eval_longitude), m*V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
                 return np.sum(Ce, 1), np.sum(-Cn, 1)
         else:
             raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
