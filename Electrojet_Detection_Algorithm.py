@@ -36,7 +36,7 @@ def main_current(Currents):
     """
     Find the boundaries, sheet current density integral, peak sheet current density and the peak location of the sheet current density. 
     Uses the 10% quantile of the data and assumes search for eastward electrojet (reverse the signs of the eastward current before input and the algorithm will find the electrojet properties of the westward electrojet)
-    Finds the top 3 strongest electrojet in each profile and will return NAN when the properties cannot be found. 
+    Finds the top 3 strongest electrojets in each profile and will return NAN when the properties cannot be found. 
     i.e. if there is only one electrojet then proprties will be found for that one and in the place of the other 2 there will be NANs.
     
     Parameters
@@ -143,69 +143,69 @@ def result(results, num_data):
     for i in range(num_data):
         ret.append(np.concatenate(np.array(results)[:, i]))
     return ret
-
-#Latitudes used in the original set up
-mlat= np.linspace(49, 81, 50)
-#Setting up the column names for the data frame and HDF file where the electrojet properties will be put
-columns=['Date_UTC', 'MLT']
-for string in ['_Eastward','_Westward']:
-    for i in range(1,4):
-        for title in ['Equatorward_Boundary', 'Poleward_Boundary','Peak_Lat', 'Peak_Value', 'Current', 'Width']:
-            columns.append(title+string+str(i))
-#Loading the store containing the SECS analysis output from evaulating along the meridian at each time step
-store= pd.HDFStore('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/Data/Meridian_Analysis/results_singularity_mod.hdf5', mode='r')
-#Loading pool which is used for parallelising this algorithm, allowing python to use more than one core and work faster
-from multiprocessing import Pool
-# 8 cores are selected as defualt adust accordingly
-p= Pool(8)
-#Records the time the algorithm began, this is used to track progress in order to see it will be completed in a sensible amount of time
-start=time.time()
-#Chunks through the data store because it is too large to handle on most computers and less prone to crashes
-for j, data in enumerate(store.select(key='main', chunksize=40_000)):
-    #Setting up data frame
-    Output= pd.DataFrame(columns=columns)
-    #Getting east currents in time order
-    Currents= data[data.columns[2:52]].values
-    #Getting the times in the data set
-    Output.Date_UTC=data.Date_UTC
-    #Getting the MLTs of the data set
-    Output.MLT= data.MLT
-    #Splitting the currents into the first 7 equal sized chunks to be used across 7 cores
-    #negative of the currents is used so the westward electrojet properties cane be found
-    splits= np.split(-(Currents)[:len(Currents)-(len(Currents)%7)], 7)
-    #Any remaining data, if data set length is not a multiple of 7, is placed on the 8th core
-    if len(Currents)%7 !=0:
-        splits.append(-(Currents)[len(Currents)-(len(Currents)%7):])
-    #Peforms the algorithm and places the data in the corresponding collumn
-    Output[columns[20:][::6]], Output[columns[20:][1::6]], Output[columns[20:][2::6]], Output[columns[20:][3::6]], Output[columns[20:][4::6]]=result(p.map(main_current, splits), 5)
-    #Calculates the width by finding the difference between the boundaries
-    Output[columns[20:][5::6]]= Output[columns[20:][1::6]].values- Output[columns[20:][::6]].values
-    #Repeats for the eastward electrojet (no negative of the currents)
-    splits= np.split((Currents)[:len(Currents)-(len(Currents)%7)], 7)
-    if len(Currents)%7 !=0:
-        splits.append((Currents)[len(Currents)-(len(Currents)%7):])
-    Output[columns[2:20][::6]], Output[columns[2:20][1::6]], Output[columns[2:20][2::6]], Output[columns[2:20][3::6]], Output[columns[2:20][4::6]]=result(p.map(main_current, splits), 5)
-    
-    Output[columns[2:20][5::6]]= Output[columns[2:20][1::6]].values- Output[columns[2:20][::6]].values
-    #Change no data indicator to be a NAN
-    Output=Output.replace(9.999e3, np.nan)
-    #Change the westward electrojet peaks and integrals to be negative as they should be
-    Output[columns[20:][3::6]]=Output[columns[20:][3::6]]*-1
-    Output[columns[20:][4::6]]=Output[columns[20:][4::6]]*-1
-    Output= pd.concat((Output, data[data.columns[152:]]), axis=1)
-    #Convert each column into a float64
-    for c in Output.columns[1:]:
-        exec('Output.'+c+'=Output.'+c+".astype('float64')")
-    #Output into a HDF file
-    Output.to_hdf('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/Data/Meridian_Analysis/electrojet_boundaries_singularity_mod.hdf5', mode='a', key='main', append=True,format='t', data_columns=True)
-    #Record the interation that has been completed
-    np.savetxt('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/Data/Meridian_Analysis/latest_iterationj.txt', np.array([j]))
-    #Record the latest date that has been done
-    open('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/Data/Meridian_Analysis/latest_iterationd.txt', 'w').write(str(data.Date_UTC.values[-1]))
-    #Clear any unnecessary data stored (pandas can some times leave junk on the disk that will reduce the amount of data that can be held and gets worse with each iteration)
-    gc.collect()
-end=time.time()
-#Print the average time it takes to find the boudaries for each minute of data
-print('average per minute of data',(end-start)/store.get_storer('main').nrows)
-#Print the total time it took to perform the algorithm on all the data
-print('total time',(end-start))
+if __name__=='__main__':
+    #Latitudes used in the original set up
+    mlat= np.linspace(49, 81, 50)
+    #Setting up the column names for the data frame and HDF file where the electrojet properties will be put
+    columns=['Date_UTC', 'MLT']
+    for string in ['_Eastward','_Westward']:
+        for i in range(1,4):
+            for title in ['Equatorward_Boundary', 'Poleward_Boundary','Peak_Lat', 'Peak_Value', 'Current', 'Width']:
+                columns.append(title+string+str(i))
+    #Loading the store containing the SECS analysis output from evaulating along the meridian at each time step
+    store= pd.HDFStore('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/Data/Meridian_Analysis/results_singularity_mod.hdf5', mode='r')
+    #Loading pool which is used for parallelising this algorithm, allowing python to use more than one core and work faster
+    from multiprocessing import Pool
+    # 8 cores are selected as defualt adust accordingly
+    p= Pool(8)
+    #Records the time the algorithm began, this is used to track progress in order to see it will be completed in a sensible amount of time
+    start=time.time()
+    #Chunks through the data store because it is too large to handle on most computers and less prone to crashes
+    for j, data in enumerate(store.select(key='main', chunksize=40_000)):
+        #Setting up data frame
+        Output= pd.DataFrame(columns=columns)
+        #Getting east currents in time order
+        Currents= data[data.columns[2:52]].values
+        #Getting the times in the data set
+        Output.Date_UTC=data.Date_UTC
+        #Getting the MLTs of the data set
+        Output.MLT= data.MLT
+        #Splitting the currents into the first 7 equal sized chunks to be used across 7 cores
+        #negative of the currents is used so the westward electrojet properties cane be found
+        splits= np.split(-(Currents)[:len(Currents)-(len(Currents)%7)], 7)
+        #Any remaining data, if data set length is not a multiple of 7, is placed on the 8th core
+        if len(Currents)%7 !=0:
+            splits.append(-(Currents)[len(Currents)-(len(Currents)%7):])
+        #Peforms the algorithm and places the data in the corresponding collumn
+        Output[columns[20:][::6]], Output[columns[20:][1::6]], Output[columns[20:][2::6]], Output[columns[20:][3::6]], Output[columns[20:][4::6]]=result(p.map(main_current, splits), 5)
+        #Calculates the width by finding the difference between the boundaries
+        Output[columns[20:][5::6]]= Output[columns[20:][1::6]].values- Output[columns[20:][::6]].values
+        #Repeats for the eastward electrojet (no negative of the currents)
+        splits= np.split((Currents)[:len(Currents)-(len(Currents)%7)], 7)
+        if len(Currents)%7 !=0:
+            splits.append((Currents)[len(Currents)-(len(Currents)%7):])
+        Output[columns[2:20][::6]], Output[columns[2:20][1::6]], Output[columns[2:20][2::6]], Output[columns[2:20][3::6]], Output[columns[2:20][4::6]]=result(p.map(main_current, splits), 5)
+        
+        Output[columns[2:20][5::6]]= Output[columns[2:20][1::6]].values- Output[columns[2:20][::6]].values
+        #Change no data indicator to be a NAN
+        Output=Output.replace(9.999e3, np.nan)
+        #Change the westward electrojet peaks and integrals to be negative as they should be
+        Output[columns[20:][3::6]]=Output[columns[20:][3::6]]*-1
+        Output[columns[20:][4::6]]=Output[columns[20:][4::6]]*-1
+        Output= pd.concat((Output, data[data.columns[152:]]), axis=1)
+        #Convert each column into a float64
+        for c in Output.columns[1:]:
+            exec('Output.'+c+'=Output.'+c+".astype('float64')")
+        #Output into a HDF file
+        Output.to_hdf('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/Data/Meridian_Analysis/electrojet_boundaries_singularity_mod.hdf5', mode='a', key='main', append=True,format='t', data_columns=True)
+        #Record the interation that has been completed
+        np.savetxt('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/Data/Meridian_Analysis/latest_iterationj.txt', np.array([j]))
+        #Record the latest date that has been done
+        open('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/Data/Meridian_Analysis/latest_iterationd.txt', 'w').write(str(data.Date_UTC.values[-1]))
+        #Clear any unnecessary data stored (pandas can some times leave junk on the disk that will reduce the amount of data that can be held and gets worse with each iteration)
+        gc.collect()
+    end=time.time()
+    #Print the average time it takes to find the boudaries for each minute of data
+    print('average per minute of data',(end-start)/store.get_storer('main').nrows)
+    #Print the total time it took to perform the algorithm on all the data
+    print('total time',(end-start))
