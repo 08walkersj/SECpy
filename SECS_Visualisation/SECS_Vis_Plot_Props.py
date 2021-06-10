@@ -64,7 +64,7 @@ if __name__== '__main__':
     ax.plot((-d, +d), (-d, +d), **kwargs)        # top-left diagonal
     kwargs.update(transform=ax2.transAxes)  # switch to the bottom axes
     ax2.plot((-d, +d), (1 - d, 1 + d), **kwargs)  # bottom-left diagonal
-    prop='Peak_Value'
+    prop='Current'
     season='winter'
     mlt='23'
     plots= np.concatenate(prop_plot(prop, season, mlt, './Plotting_Data/SECS_Visualisation.hdf5', ax, ax2))
