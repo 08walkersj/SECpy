@@ -96,7 +96,7 @@ poles= SECS(node_lons, node_lats, lon, lat, mode='image', image_current_radius=R
 Le, Ln=node_grid.get_Le_Ln()
 node_f1, node_f2= A.basevectors_qd(node_grid.lat.flatten(), node_grid.lon.flatten(), 110, coords='geo')
 e= node_f1/np.linalg.norm(node_f1, axis=0)
-L= np.diag(e[0]).dot(Le) + np.diag(e[1]).dot(Ln)
+L= np.diag(e[0]).dot(Le.toarray()) + np.diag(e[1]).dot(Ln.toarray())
 
 # Curl free
 poles.Fitting_Matrix(Sat.glon.values, Sat.glat.values, eval_radius=RE+800e3, system='curl-free')

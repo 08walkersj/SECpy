@@ -823,12 +823,12 @@ class SECS:
                     G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn+Gn2, Ge+Ge2
                 elif system.lower()=='curl-free':
                     G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)))
-                    #Ionospheric and telluric Br
-                    G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]=np.zeros(magnetometer_latitude.shape)
                     #Ionospheric Btheta and Bphi
                     Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
                                  Deg2Rad(magnetometer_longitude), BphiCF(self.theta_prime, eval_radius, self.R), 0)
                     G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn, Ge
+                    #Ionospheric and telluric Br
+                    G[len(magnetometer_latitude)*2:len(magnetometer_latitude)*3]= np.zeros(Gn.shape)
                 else:
                     raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
             else:

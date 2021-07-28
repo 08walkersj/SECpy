@@ -31,6 +31,7 @@ def properties_vaex(inpath, outpath, electro_property):
     else:
         out_data= vx.from_arrays()
         columns=np.array([], dtype='>U3')
+    bias_ind= in_data.Circular_Variance_GSM<0.04
     in_data['BT_GSM']= np.sqrt(in_data.BY_GSM_Mean**2 + in_data.BZ_GSM_Mean**2)
     BT_bins= [np.nanquantile(in_data.BT_GSM.values, i) for i in np.linspace(0, 1, 21)]
     if not np.any(np.char.startswith(columns, 'BT_Bins')):
@@ -46,7 +47,7 @@ def properties_vaex(inpath, outpath, electro_property):
         error=[]
         BT= []
         for l, u in zip(BT_bins[:-1], BT_bins[1:]):
-            in_data.select(pos_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u))
+            in_data.select(pos_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind)
             for suffix in ['_Eastward1', '_Westward1']:
                 mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
                 error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
@@ -64,7 +65,7 @@ def properties_vaex(inpath, outpath, electro_property):
         error=[]
         BT= []
         for l, u in zip(BT_bins[:-1], BT_bins[1:]):
-            in_data.select(neg_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u))
+            in_data.select(neg_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind)
             for suffix in ['_Eastward1', '_Westward1']:
                 mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
                 error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
