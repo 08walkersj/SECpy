@@ -9,82 +9,11 @@ import pandas as pd
 import numpy as np
 from progressbar import progressbar
 import os
-from SECpy import ArgumentError
-def boundary_create(inpath, outpath, electro_property, in_format='vaex'):
-    if in_format.lower()=='pandas':
-        properties_pandas(inpath, outpath, electro_property)
-    elif in_format.lower()=='vaex':
-        properties_vaex(inpath, outpath, electro_property)
-    else:
-        raise ArgumentError(f'Invalid in format please choose either pandas or vaex. You chose {in_format}')
-def properties_vaex(inpath, outpath, electro_property):
-    print('\n',electro_property, '\n')
-    import vaex as vx
-    in_data= vx.open(inpath) # Loading the vaex file
-    mlat= np.linspace(49, 81, 50) # Latitude values where the meridian was evaluated
-    UL= mlat[-3] # Upper meridian limit
-    LL= mlat[2] # Lower meridian limit
-    if os.path.isfile(outpath):
-        out_data= vx.open(outpath) # Load then output file if it always exists
-        columns= np.array(out_data.get_column_names()) # Load output file columns in order to check what has already been done
-
-    else:
-        out_data= vx.from_arrays()
-        columns=np.array([], dtype='>U3')
-    bias_ind= in_data.Circular_Variance_GSM<0.04
-    in_data['BT_GSM']= np.sqrt(in_data.BY_GSM_Mean**2 + in_data.BZ_GSM_Mean**2)
-    BT_bins= [np.nanquantile(in_data.BT_GSM.values, i) for i in np.linspace(0, 1, 21)]
-    if not np.any(np.char.startswith(columns, 'BT_Bins')):
-        out_data['BT_Bins']= np.array([f'{l} - {u}' for l, u in zip(BT_bins[:-1], BT_bins[1:])])
-    #Seasonal All mlts
-    for months, season in progressbar(zip(np.array([[5,6,7], [11, 12, 1]]), np.array(['summer', 'winter'])), max_value=2):
-        prefix= electro_property.lower()+'_'+season
-        if np.any(np.char.startswith(columns, prefix)):
-            print(f'skipped: {prefix}')
-            continue
-        pos_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM>=3)
-        mean=[]
-        error=[]
-        BT= []
-        for l, u in zip(BT_bins[:-1], BT_bins[1:]):
-            in_data.select(pos_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind)
-            for suffix in ['_Eastward1', '_Westward1']:
-                mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
-                error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
-            BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
-        mean=np.array(mean)
-        error=np.array(error)
-        BT=np.array(BT)
-        out_data[prefix+'_Eastward_Pos']= mean[::2]
-        out_data[prefix+'_Eastward_Error_Pos']= error[::2]
-        out_data[prefix+'_Westward_Pos']= mean[1::2]
-        out_data[prefix+'_Westward_Error_Pos']= error[1::2]
-        out_data[prefix+'_BT_Pos']= BT
-        neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
-        mean=[]
-        error=[]
-        BT= []
-        for l, u in zip(BT_bins[:-1], BT_bins[1:]):
-            in_data.select(neg_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind)
-            for suffix in ['_Eastward1', '_Westward1']:
-                mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
-                error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
-            BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
-        mean=np.array(mean)
-        error=np.array(error)
-        BT=np.array(BT)
-        out_data[prefix+'_Eastward_Neg']= mean[::2]
-        out_data[prefix+'_Eastward_Error_Neg']= error[::2]
-        out_data[prefix+'_Westward_Neg']= mean[1::2]
-        out_data[prefix+'_Westward_Error_Neg']= error[1::2]
-        out_data[prefix+'_BT_Neg']= BT
-        out_data.export_hdf5(outpath)
-def properties_pandas(inpath, outpath, electro_property):
+def boundary_create(inpath, outpath, electro_property):
     print('\n',electro_property, '\n')
     mlat= np.linspace(49, 81, 50)
     UL= mlat[-3]
     LL= mlat[2]
-    # Loading the pandas store to check what already exists in the file (avoiding repeats)
     store=pd.HDFStore(inpath, mode='r')
     keys=[]
     if os.path.isfile(outpath):
@@ -771,13 +700,11 @@ def Create(boundaries_path, meridian_path, out_path):
     profile_create(meridian_path, out_path)
     average_current_create(meridian_path, out_path)
 if __name__=='__main__':
-    # boundaries_path= './SECS_Data/electrojet_boundaries_Clock.hdf5'
-    # out_path= './Plotting_Data/SECS_Visualisation.hdf5'
-    # meridian_path= './SECS_Data/results_singularity_mod_clock2.hdf5'
-    # Create(boundaries_path, meridian_path, out_path)
-    boundaries_path='./SECS_Data/electrojet_boundaries_IMF_vaex.hdf5'
-    out_path='./Plotting_Data/SECS_Visualisation_Vaex.hdf5'
-    boundary_create(boundaries_path, out_path, 'Width')
+    boundaries_path= './SECS_Data/electrojet_boundaries_Clock.hdf5'
+    out_path= './Plotting_Data/SECS_Visualisation.hdf5'
+    meridian_path= './SECS_Data/results_singularity_mod_clock2.hdf5'
+    Create(boundaries_path, meridian_path, out_path)
+# boundary_create(boundaries_path, out_path, 'Width')
 # boundary_create(boundaries_path, out_path, 'Current')
 # boundary_create(boundaries_path, out_path, 'Peak_Value')
 # profile_create(meridian_path, out_path)
