@@ -18,16 +18,22 @@ def boundary_create(inpath, outpath, electro_property, in_format='vaex'):
     else:
         raise ArgumentError(f'Invalid in format please choose either pandas or vaex. You chose {in_format}')
 def properties_vaex(inpath, outpath, electro_property):
-    print('\n',electro_property, '\n')
+    print('\n>>>>>>',electro_property, '<<<<<<\n')
     import vaex as vx
     in_data= vx.open(inpath) # Loading the vaex file
     mlat= np.linspace(49, 81, 50) # Latitude values where the meridian was evaluated
     UL= mlat[-3] # Upper meridian limit
     LL= mlat[2] # Lower meridian limit
     if os.path.isfile(outpath):
-        out_data= vx.open(outpath) # Load then output file if it always exists
+        out_data= vx.open(outpath) # Load then output file if it already exists
         columns= np.array(out_data.get_column_names()) # Load output file columns in order to check what has already been done
-
+        print('Creating Back Up')
+        if len(out_path.split('.'))>2:
+            back_up_path= ''.join(list(out_path[:1]))+'_back_up.'.join(out_path.split('.')[len(out_path.split('.'))-2:])
+        else:
+            back_up_path= '_back_up.'.join(out_path.split('.'))
+        print(back_up_path)
+        out_data.export_hdf5(back_up_path)
     else:
         out_data= vx.from_arrays()
         columns=np.array([], dtype='>U3')
@@ -37,11 +43,159 @@ def properties_vaex(inpath, outpath, electro_property):
     if not np.any(np.char.startswith(columns, 'BT_Bins')):
         out_data['BT_Bins']= np.array([f'{l} - {u}' for l, u in zip(BT_bins[:-1], BT_bins[1:])])
     #Seasonal All mlts
-    for months, season in progressbar(zip(np.array([[5,6,7], [11, 12, 1]]), np.array(['summer', 'winter'])), max_value=2):
+    for months, season in progressbar(zip(np.array([[5,6,7], [11, 12, 1]]), np.array(['summer', 'winter'])), max_value=2, prefix='Seasonal |'):
         prefix= electro_property.lower()+'_'+season
         if np.any(np.char.startswith(columns, prefix)):
             print(f'skipped: {prefix}')
             continue
+        season_ind= in_data.Date_UTC.dt.month.isin(months)
+        pos_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM>=3)
+        mean=[]
+        error=[]
+        BT= []
+        for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+            in_data.select(pos_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&season_ind)
+            for suffix in ['_Eastward1', '_Westward1']:
+                mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+            BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+        mean=np.array(mean)
+        error=np.array(error)
+        BT=np.array(BT)
+        out_data[prefix+'_Eastward_Pos']= mean[::2]
+        out_data[prefix+'_Eastward_Error_Pos']= error[::2]
+        out_data[prefix+'_Westward_Pos']= mean[1::2]
+        out_data[prefix+'_Westward_Error_Pos']= error[1::2]
+        out_data[prefix+'_BT_Pos']= BT
+        neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
+        mean=[]
+        error=[]
+        BT= []
+        for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+            in_data.select(neg_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&season_ind)
+            for suffix in ['_Eastward1', '_Westward1']:
+                mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+            BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+        mean=np.array(mean)
+        error=np.array(error)
+        BT=np.array(BT)
+        out_data[prefix+'_Eastward_Neg']= mean[::2]
+        out_data[prefix+'_Eastward_Error_Neg']= error[::2]
+        out_data[prefix+'_Westward_Neg']= mean[1::2]
+        out_data[prefix+'_Westward_Error_Neg']= error[1::2]
+        out_data[prefix+'_BT_Neg']= BT
+        out_data.export_hdf5(outpath)
+    for mlt in progressbar(np.arange(0, 24), max_value=24, prefix='MLT Seasonal |'):
+        mlt1= mlt-1
+        mlt2= mlt+1
+        if mlt1<0:
+            mlt_ind= (in_data.MLT>=23) | (in_data.MLT<=1)
+        else:
+            mlt_ind= (in_data.MLT>=mlt1) & (in_data.MLT<=mlt2)
+        for months, season in progressbar(zip(np.array([[5,6,7], [11, 12, 1]]), np.array(['summer', 'winter'])), max_value=2, prefix='MLT Seasonal |', suffix=f'| mlt: {mlt}'):
+            prefix= electro_property.lower()+'_'+season+f'_{mlt}'
+            if np.any(np.char.startswith(columns, prefix)):
+                print(f'skipped: {prefix}')
+                continue
+            season_ind= in_data.Date_UTC.dt.month.isin(months)
+            pos_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM>=3)
+            mean=[]
+            error=[]
+            BT= []
+            for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+                in_data.select(pos_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&mlt_ind&season_ind)
+                for suffix in ['_Eastward1', '_Westward1']:
+                    # print(in_data[electro_property+suffix].count(selection=True))
+                    mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                    error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+                BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+            mean=np.array(mean)
+            error=np.array(error)
+            BT=np.array(BT)
+            out_data[prefix+'_Eastward_Pos']= mean[::2]
+            out_data[prefix+'_Eastward_Error_Pos']= error[::2]
+            out_data[prefix+'_Westward_Pos']= mean[1::2]
+            out_data[prefix+'_Westward_Error_Pos']= error[1::2]
+            out_data[prefix+'_BT_Pos']= BT
+            neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
+            mean=[]
+            error=[]
+            BT= []
+            for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+                in_data.select(neg_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&mlt_ind&season_ind)
+                for suffix in ['_Eastward1', '_Westward1']:
+                    # if mlt>15:
+                    #     # print(f'{mlt}: ', in_data.evaluate(in_data[electro_property+suffix], selection=True))
+                    #     print(f'{mlt}: ',float(in_data[electro_property+suffix].std(selection=True)))
+                    # print(in_data[electro_property+suffix].count(selection=True))
+                    # print(np.sqrt(in_data[electro_property+suffix].count(selection=True)))
+                    mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                    error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+                BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+            mean=np.array(mean)
+            error=np.array(error)
+            BT=np.array(BT)
+            out_data[prefix+'_Eastward_Neg']= mean[::2]
+            out_data[prefix+'_Eastward_Error_Neg']= error[::2]
+            out_data[prefix+'_Westward_Neg']= mean[1::2]
+            out_data[prefix+'_Westward_Error_Neg']= error[1::2]
+            out_data[prefix+'_BT_Neg']= BT
+            out_data.export_hdf5(outpath)
+    #All Seasons MLTs
+    for mlt in progressbar(np.arange(0, 24), max_value=24, prefix='MLT All Seasons |'):
+        mlt1= mlt-1
+        mlt2= mlt+1
+        if mlt1<0:
+            mlt_ind= (in_data.MLT>=23) | (in_data.MLT<=1)
+        else:
+            mlt_ind= (in_data.MLT>=mlt1) & (in_data.MLT<=mlt2)
+        prefix= electro_property.lower()+f'_{mlt}'
+        if np.any(np.char.startswith(columns, prefix)):
+            print(f'skipped: {prefix}')
+            continue
+        pos_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM>=3)
+        mean=[]
+        error=[]
+        BT= []
+        for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+            in_data.select(pos_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&mlt_ind)
+            for suffix in ['_Eastward1', '_Westward1']:
+                mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+            BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+        mean=np.array(mean)
+        error=np.array(error)
+        BT=np.array(BT)
+        out_data[prefix+'_Eastward_Pos']= mean[::2]
+        out_data[prefix+'_Eastward_Error_Pos']= error[::2]
+        out_data[prefix+'_Westward_Pos']= mean[1::2]
+        out_data[prefix+'_Westward_Error_Pos']= error[1::2]
+        out_data[prefix+'_BT_Pos']= BT
+        neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
+        mean=[]
+        error=[]
+        BT= []
+        for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+            in_data.select(neg_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&mlt_ind)
+            for suffix in ['_Eastward1', '_Westward1']:
+                mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+            BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+        mean=np.array(mean)
+        error=np.array(error)
+        BT=np.array(BT)
+        out_data[prefix+'_Eastward_Neg']= mean[::2]
+        out_data[prefix+'_Eastward_Error_Neg']= error[::2]
+        out_data[prefix+'_Westward_Neg']= mean[1::2]
+        out_data[prefix+'_Westward_Error_Neg']= error[1::2]
+        out_data[prefix+'_BT_Neg']= BT
+        out_data.export_hdf5(outpath)
+    #ALl Seasons All MLTS
+    prefix= electro_property.lower()
+    if np.any(np.char.startswith(columns, prefix)):
+        print(f'skipped: {prefix}')
+    else:
         pos_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM>=3)
         mean=[]
         error=[]
@@ -79,6 +233,332 @@ def properties_vaex(inpath, outpath, electro_property):
         out_data[prefix+'_Westward_Error_Neg']= error[1::2]
         out_data[prefix+'_BT_Neg']= BT
         out_data.export_hdf5(outpath)
+    #All Seasons Clock Angle All MLTs
+    for Clock_Angle in progressbar(np.arange(-180, 190, 45), max_value=9, prefix='Clock Angle |'):
+        prefix= electro_property.lower()+f'_Clock{Clock_Angle}'
+        if abs(Clock_Angle)== 180:
+            clock_ind= (in_data.Clock_GSM_Mean>= np.deg2rad(157.5)) | (in_data.Clock_GSM_Mean<=-np.deg2rad(157.5))
+        else:
+            clock1= Clock_Angle-22.5
+            clock2= Clock_Angle+22.5
+            clock_ind= (in_data.Clock_GSM_Mean>=np.deg2rad(clock1)) & (in_data.Clock_GSM_Mean<=np.deg2rad(clock2))
+        bad_ind= in_data.BY_GSM_Mean!=9.999e3
+        mean=[]
+        error=[]
+        BT= []
+        for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+            in_data.select(bad_ind&clock_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind)
+            for suffix in ['_Eastward1', '_Westward1']:
+                mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+            BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+        mean=np.array(mean)
+        error=np.array(error)
+        BT=np.array(BT)
+        out_data[prefix+'_Eastward']= mean[::2]
+        out_data[prefix+'_Eastward_Error']= error[::2]
+        out_data[prefix+'_Westward']= mean[1::2]
+        out_data[prefix+'_Westward_Error']= error[1::2]
+        out_data[prefix+'_BT']= BT
+        out_data.export_hdf5(outpath)
+    #Seasonal Clock Angle All MLTs
+    for Clock_Angle in progressbar(np.arange(-180, 190, 45), max_value=9, prefix='Clock Angle Seasonal |'):
+        for months, season in progressbar(zip(np.array([[5,6,7], [11, 12, 1]]), np.array(['summer', 'winter'])), max_value=2, 
+                                          prefix='Clock Angle Seasonal |', suffix=f'| Clock: {Clock_Angle}'):
+            prefix= electro_property.lower()+'_'+season+f'_Clock{Clock_Angle}'
+            if np.any(np.char.startswith(columns, prefix)):
+                print(f'skipped: {prefix}')
+                continue
+            season_ind= in_data.Date_UTC.dt.month.isin(months)
+            if abs(Clock_Angle)== 180:
+                clock_ind= (in_data.Clock_GSM_Mean>= np.deg2rad(157.5)) | (in_data.Clock_GSM_Mean<=-np.deg2rad(157.5))
+            else:
+                clock1= Clock_Angle-22.5
+                clock2= Clock_Angle+22.5
+                clock_ind= (in_data.Clock_GSM_Mean>=np.deg2rad(clock1)) & (in_data.Clock_GSM_Mean<=np.deg2rad(clock2))
+            bad_ind= in_data.BY_GSM_Mean!=9.999e3
+            mean=[]
+            error=[]
+            BT= []
+            for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+                in_data.select(bad_ind&clock_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&season_ind)
+                for suffix in ['_Eastward1', '_Westward1']:
+                    mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                    error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+                BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+            mean=np.array(mean)
+            error=np.array(error)
+            BT=np.array(BT)
+            out_data[prefix+'_Eastward']= mean[::2]
+            out_data[prefix+'_Eastward_Error']= error[::2]
+            out_data[prefix+'_Westward']= mean[1::2]
+            out_data[prefix+'_Westward_Error']= error[1::2]
+            out_data[prefix+'_BT']= BT
+            out_data.export_hdf5(outpath)
+    #Seasonal Clock Angle MLTs
+    for Clock_Angle in progressbar(np.arange(-180, 190, 45), max_value=9, prefix='Clock Angle Seasonal MLTs |'):
+        for mlt in progressbar(np.arange(0, 24), max_value=24, prefix='Clock Angle Seasonal MLTs |', suffix=f'| Clock: {Clock_Angle}'):
+            mlt1= mlt-1
+            mlt2= mlt+1
+            if mlt1<0:
+                mlt_ind= (in_data.MLT>=23) | (in_data.MLT<=1)
+            else:
+                mlt_ind= (in_data.MLT>=mlt1) & (in_data.MLT<=mlt2)
+            for months, season in progressbar(zip(np.array([[5,6,7], [11, 12, 1]]), np.array(['summer', 'winter'])), max_value=2, 
+                                              prefix='Clock Angle Seasonal MLTs |', suffix=f'| Clock: {Clock_Angle}, mlt: {mlt}'):
+                prefix= electro_property.lower()+'_'+season+f'_{mlt}'+f'_Clock{Clock_Angle}'
+                if np.any(np.char.startswith(columns, prefix)):
+                    print(f'skipped: {prefix}')
+                    continue
+                season_ind= in_data.Date_UTC.dt.month.isin(months)
+                if abs(Clock_Angle)== 180:
+                    clock_ind= (in_data.Clock_GSM_Mean>= np.deg2rad(157.5)) | (in_data.Clock_GSM_Mean<=-np.deg2rad(157.5))
+                else:
+                    clock1= Clock_Angle-22.5
+                    clock2= Clock_Angle+22.5
+                    clock_ind= (in_data.Clock_GSM_Mean>=np.deg2rad(clock1)) & (in_data.Clock_GSM_Mean<=np.deg2rad(clock2))
+                bad_ind= in_data.BY_GSM_Mean!=9.999e3
+                mean=[]
+                error=[]
+                BT= []
+                for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+                    in_data.select(bad_ind&clock_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&season_ind&mlt_ind)
+                    for suffix in ['_Eastward1', '_Westward1']:
+                        mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                        error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+                    BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+                mean=np.array(mean)
+                error=np.array(error)
+                BT=np.array(BT)
+                out_data[prefix+'_Eastward']= mean[::2]
+                out_data[prefix+'_Eastward_Error']= error[::2]
+                out_data[prefix+'_Westward']= mean[1::2]
+                out_data[prefix+'_Westward_Error']= error[1::2]
+                out_data[prefix+'_BT']= BT
+                out_data.export_hdf5(outpath)
+    #All Seasons Clock Angle MLTs
+    for Clock_Angle in progressbar(np.arange(-180, 190, 45), max_value=9, prefix='Clock Angle MLTs |'):
+        for mlt in progressbar(np.arange(0, 24), max_value=24, prefix='Clock Angle MLTs |', suffix= f'| Clock: {Clock_Angle}'):
+            mlt1= mlt-1
+            mlt2= mlt+1
+            if mlt1<0:
+                mlt_ind= (in_data.MLT>=23) | (in_data.MLT<=1)
+            else:
+                mlt_ind= (in_data.MLT>=mlt1) & (in_data.MLT<=mlt2)
+            prefix= electro_property.lower()+f'_{mlt}'+f'_Clock{Clock_Angle}'
+            if np.any(np.char.startswith(columns, prefix)):
+                print(f'skipped: {prefix}')
+                continue
+            if abs(Clock_Angle)== 180:
+                clock_ind= (in_data.Clock_GSM_Mean>= np.deg2rad(157.5)) | (in_data.Clock_GSM_Mean<=-np.deg2rad(157.5))
+            else:
+                clock1= Clock_Angle-22.5
+                clock2= Clock_Angle+22.5
+                clock_ind= (in_data.Clock_GSM_Mean>=np.deg2rad(clock1)) & (in_data.Clock_GSM_Mean<=np.deg2rad(clock2))
+            bad_ind= in_data.BY_GSM_Mean!=9.999e3
+            mean=[]
+            error=[]
+            BT= []
+            for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+                in_data.select(bad_ind&clock_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&mlt_ind)
+                for suffix in ['_Eastward1', '_Westward1']:
+                    mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                    error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+                BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+            mean=np.array(mean)
+            error=np.array(error)
+            BT=np.array(BT)
+            out_data[prefix+'_Eastward']= mean[::2]
+            out_data[prefix+'_Eastward_Error']= error[::2]
+            out_data[prefix+'_Westward']= mean[1::2]
+            out_data[prefix+'_Westward_Error']= error[1::2]
+            out_data[prefix+'_BT']= BT
+            out_data.export_hdf5(outpath)
+    # Dipole Tilt All Clocks All MLTs
+    for tilt in progressbar(np.arange(-30, 35, 10), max_value=7, prefix='Dipole Tilt All Clock Angles All MLTs'):
+        prefix= electro_property.lower()+f'_Tilt{tilt}'
+        if np.any(np.char.startswith(columns, prefix)):
+            print(f'skipped: {prefix}')
+            continue
+        tilt1= tilt-5
+        tilt2= tilt+5
+        tilt_ind= (in_data.Dipole_Tilt>=tilt1) & (in_data.Dipole_Tilt<=tilt2)
+        pos_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM>=3)
+        mean=[]
+        error=[]
+        BT= []
+        for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+            in_data.select(pos_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&tilt_ind)
+            for suffix in ['_Eastward1', '_Westward1']:
+                mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+            BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+        mean=np.array(mean)
+        error=np.array(error)
+        BT=np.array(BT)
+        out_data[prefix+'_Eastward_Pos']= mean[::2]
+        out_data[prefix+'_Eastward_Error_Pos']= error[::2]
+        out_data[prefix+'_Westward_Pos']= mean[1::2]
+        out_data[prefix+'_Westward_Error_Pos']= error[1::2]
+        out_data[prefix+'_BT_Pos']= BT
+        neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
+        mean=[]
+        error=[]
+        BT= []
+        for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+            in_data.select(neg_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&tilt_ind)
+            for suffix in ['_Eastward1', '_Westward1']:
+                mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+            BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+        mean=np.array(mean)
+        error=np.array(error)
+        BT=np.array(BT)
+        out_data[prefix+'_Eastward_Neg']= mean[::2]
+        out_data[prefix+'_Eastward_Error_Neg']= error[::2]
+        out_data[prefix+'_Westward_Neg']= mean[1::2]
+        out_data[prefix+'_Westward_Error_Neg']= error[1::2]
+        out_data[prefix+'_BT_Neg']= BT
+        out_data.export_hdf5(outpath)
+    # Dipole Tilt All Clocks MLTs
+    for tilt in progressbar(np.arange(-30, 35, 10), max_value=7, prefix='Dipole Tilt All Clock Angles MLTs |'):
+        for mlt in progressbar(np.arange(0, 24), max_value=24, prefix='Dipole Tilt All Clock Angles MLTs |', suffix= f'| Tilt: {tilt}'):
+            mlt1= mlt-1
+            mlt2= mlt+1
+            if mlt1<0:
+                mlt_ind= (in_data.MLT>=23) | (in_data.MLT<=1)
+            else:
+                mlt_ind= (in_data.MLT>=mlt1) & (in_data.MLT<=mlt2)
+            prefix= electro_property.lower()+f'_{mlt}'+f'_Tilt{tilt}'
+            if np.any(np.char.startswith(columns, prefix)):
+                print(f'skipped: {prefix}')
+                continue
+            tilt1= tilt-5
+            tilt2= tilt+5
+            tilt_ind= (in_data.Dipole_Tilt>=tilt1) & (in_data.Dipole_Tilt<=tilt2)
+            pos_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM>=3)
+            mean=[]
+            error=[]
+            BT= []
+            for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+                in_data.select(pos_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&tilt_ind&mlt_ind)
+                for suffix in ['_Eastward1', '_Westward1']:
+                    mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                    error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+                BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+            mean=np.array(mean)
+            error=np.array(error)
+            BT=np.array(BT)
+            out_data[prefix+'_Eastward_Pos']= mean[::2]
+            out_data[prefix+'_Eastward_Error_Pos']= error[::2]
+            out_data[prefix+'_Westward_Pos']= mean[1::2]
+            out_data[prefix+'_Westward_Error_Pos']= error[1::2]
+            out_data[prefix+'_BT_Pos']= BT
+            neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
+            mean=[]
+            error=[]
+            BT= []
+            for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+                in_data.select(neg_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&tilt_ind&mlt_ind)
+                for suffix in ['_Eastward1', '_Westward1']:
+                    mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                    error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+                BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+            mean=np.array(mean)
+            error=np.array(error)
+            BT=np.array(BT)
+            out_data[prefix+'_Eastward_Neg']= mean[::2]
+            out_data[prefix+'_Eastward_Error_Neg']= error[::2]
+            out_data[prefix+'_Westward_Neg']= mean[1::2]
+            out_data[prefix+'_Westward_Error_Neg']= error[1::2]
+            out_data[prefix+'_BT_Neg']= BT
+            out_data.export_hdf5(outpath)
+    # Dipole Tilt Clocks MLTs
+    for tilt in progressbar(np.arange(-30, 35, 10), max_value=7, prefix='Dipole Tilt Clock Angles MLTs |'):
+        for Clock_Angle in progressbar(np.arange(-180, 190, 45), max_value=9, prefix='Dipole Tilt Clock Angles MLTs |',
+                                       suffix=f'| Tilt: {tilt}'):
+            for mlt in progressbar(np.arange(0, 24), max_value=24, prefix='Dipole Tilt Clock Angles MLTs |', 
+                                   suffix= f'| Tilt: {tilt}, Clock: {Clock_Angle}'):
+                prefix= electro_property.lower()+f'_{mlt}'+f'_Clock{Clock_Angle}'+f'_Tilt{tilt}'
+                if np.any(np.char.startswith(columns, prefix)):
+                    print(f'skipped: {prefix}')
+                    continue
+                mlt1= mlt-1
+                mlt2= mlt+1
+                if mlt1<0:
+                    mlt_ind= (in_data.MLT>=23) | (in_data.MLT<=1)
+                else:
+                    mlt_ind= (in_data.MLT>=mlt1) & (in_data.MLT<=mlt2)
+                if abs(Clock_Angle)== 180:
+                    clock_ind= (in_data.Clock_GSM_Mean>= np.deg2rad(157.5)) | (in_data.Clock_GSM_Mean<=-np.deg2rad(157.5))
+                else:
+                    clock1= Clock_Angle-22.5
+                    clock2= Clock_Angle+22.5
+                    clock_ind= (in_data.Clock_GSM_Mean>=np.deg2rad(clock1)) & (in_data.Clock_GSM_Mean<=np.deg2rad(clock2))
+                tilt1= tilt-5
+                tilt2= tilt+5
+                tilt_ind= (in_data.Dipole_Tilt>=tilt1) & (in_data.Dipole_Tilt<=tilt2)
+                bad_ind= in_data.BY_GSM_Mean!=9.999e3
+                mean=[]
+                error=[]
+                BT= []
+                for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+                    in_data.select(bad_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&tilt_ind&mlt_ind&clock_ind)
+                    for suffix in ['_Eastward1', '_Westward1']:
+                        mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                        error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+                    BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+                mean=np.array(mean)
+                error=np.array(error)
+                BT=np.array(BT)
+                out_data[prefix+'_Eastward']= mean[::2]
+                out_data[prefix+'_Eastward_Error']= error[::2]
+                out_data[prefix+'_Westward']= mean[1::2]
+                out_data[prefix+'_Westward_Error']= error[1::2]
+                out_data[prefix+'_BT']= BT
+                out_data.export_hdf5(outpath)
+    # Dipole Tilt Clocks All MLTs
+    for tilt in progressbar(np.arange(-30, 35, 10), max_value=7, prefix='Dipole Tilt Clock Angles |'):
+        for Clock_Angle in progressbar(np.arange(-180, 190, 45), max_value=9, prefix='Dipole Tilt Clock Angles |',
+                                       suffix=f'| Tilt: {tilt}'):
+            prefix= electro_property.lower()+f'_Clock{Clock_Angle}'+f'_Tilt{tilt}'
+            if np.any(np.char.startswith(columns, prefix)):
+                print(f'skipped: {prefix}')
+                continue
+            mlt1= mlt-1
+            mlt2= mlt+1
+            if mlt1<0:
+                mlt_ind= (in_data.MLT>=23) | (in_data.MLT<=1)
+            else:
+                mlt_ind= (in_data.MLT>=mlt1) & (in_data.MLT<=mlt2)
+            if abs(Clock_Angle)== 180:
+                clock_ind= (in_data.Clock_GSM_Mean>= np.deg2rad(157.5)) | (in_data.Clock_GSM_Mean<=-np.deg2rad(157.5))
+            else:
+                clock1= Clock_Angle-22.5
+                clock2= Clock_Angle+22.5
+                clock_ind= (in_data.Clock_GSM_Mean>=np.deg2rad(clock1)) & (in_data.Clock_GSM_Mean<=np.deg2rad(clock2))
+            tilt1= tilt-5
+            tilt2= tilt+5
+            tilt_ind= (in_data.Dipole_Tilt>=tilt1) & (in_data.Dipole_Tilt<=tilt2)
+            bad_ind= in_data.BY_GSM_Mean!=9.999e3
+            mean=[]
+            error=[]
+            BT= []
+            for l, u in zip(BT_bins[:-1], BT_bins[1:]):
+                in_data.select(bad_ind&(in_data.BT_GSM>=l)&(in_data.BT_GSM<=u)&bias_ind&tilt_ind&clock_ind)
+                for suffix in ['_Eastward1', '_Westward1']:
+                    mean.append(float(in_data[electro_property+suffix].mean(selection=True)))
+                    error.append(float(in_data[electro_property+suffix].std(selection=True)/np.sqrt(in_data[electro_property+suffix].count(selection=True))))
+                BT.append(float(in_data.median_approx(in_data.BT_GSM, selection=True)))
+            mean=np.array(mean)
+            error=np.array(error)
+            BT=np.array(BT)
+            out_data[prefix+'_Eastward']= mean[::2]
+            out_data[prefix+'_Eastward_Error']= error[::2]
+            out_data[prefix+'_Westward']= mean[1::2]
+            out_data[prefix+'_Westward_Error']= error[1::2]
+            out_data[prefix+'_BT']= BT
+            out_data.export_hdf5(outpath)
 def properties_pandas(inpath, outpath, electro_property):
     print('\n',electro_property, '\n')
     mlat= np.linspace(49, 81, 50)
