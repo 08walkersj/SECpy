@@ -6,7 +6,7 @@ Created on Tue Jun  2 16:38:32 2020
 
 """
 #@author: zef014
-
+#%% Import packages
 import pandas as pd
 import numpy as np
 import pyamps
@@ -15,16 +15,16 @@ from SECpy import RE, SECS
 import vaex
 from apexpy import Apex
 import datetime as dt
-import sys
-sys.path.append('/Home/siv32/zef014/')
-from SECSY.secsy import cubedsphere as CS
+from secsy.secsy import cubedsphere as CS
 import time
+from progressbar import progressbar
 # import matplotlib.pyplot as plt
 import gc
 """CREATING MATRICES"""
 def Ultimate_Matrix(Matrices, fitting_matrix):
     #Combines Matrices into one
     return np.concatenate(Matrices)@fitting_matrix
+#%% Set Up Matrices
 """Grid"""
 #Creating the grid using the cubed sphere method
 lon_centre= 17.7
@@ -42,9 +42,7 @@ MagLat= np.array([54.61, 55.62, 59.9 , 60.5 , 62.3 , 64.52, 64.94, 66.9 , 67.37,
 MagLon= np.array([18.82, 11.67, 17.35, 24.65, 26.65, 27.23, 10.99, 24.08, 26.63,
         23.53, 18.82, 20.79, 16.03, 18.94, 27.01, 22.22, 19.2 , 15.6 ,
         15.83, 11.95])
-sites=np.array(['LYR', 'BJN', 'TRO', 'HRN', 'ABK', 'SOD', 'NUR', 'BFE', 'NAL',
-        'SOR', 'AND', 'KEV', 'KIL', 'MUO', 'PEL', 'OUJ', 'HAN', 'UPS',
-        'HLP', 'RVK'], dtype='<U3')
+
 """Meridian"""
 mlat= np.linspace(49, 81, 50)
 depth=500
@@ -57,22 +55,28 @@ f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3= A.basevectors_apex(merid_glat, m
 Le, Ln=node_grid.get_Le_Ln()
 node_f1, node_f2= A.basevectors_qd(node_grid.lat.flatten(), node_grid.lon.flatten(), 110, coords='geo')
 e= node_f1/np.linalg.norm(node_f1, axis=0)
-L= np.diag(e[0]).dot(Le) + np.diag(e[1]).dot(Ln)
+L= np.diag(e[0]).dot(Le.toarray()) + np.diag(e[1]).dot(Ln.toarray())
 G=poles.G_Matrix(MagLon, MagLat)
 GTG= np.dot(G.T, G)
 matrix= GTG + λ1*np.identity(GTG.shape[0]) +λ2*np.dot(L.T, L)/np.max(np.abs(np.dot(L.T, L)))
 Inverse= poles.Inverse_Matrix(matrix, cond=0)
 poles.fitting_matrix= np.dot(Inverse,G.T)
 GT, GI= poles.eval_G_Matrix_B()
+GBn= GT[2] + GI[2]
+GBe= GT[1] + GI[1]
 GBr= GT[0] + GI[0]
 GJe, GJn= poles.eval_G_Matrix_J(singularity_limit=50e3)
-qd_east= np.vstack(g1[0])*GJe +np.vstack(g1[1])*GJn
-qd_north= np.vstack(g2[0])*GJe +np.vstack(g2[1])*GJn
+qd_east= np.vstack(g1[0])*GBe +np.vstack(g1[1])*GBn
+qd_north= np.vstack(g2[0])*GBe +np.vstack(g2[1])*GBn
 Output= Ultimate_Matrix([qd_east, qd_north, GBr], poles.fitting_matrix)
-np.savetxt('Data/SECS_Running_Files/Ultimate_Matrix_Sing_mod.txt', Output)
-
+np.savetxt('/media/simon/Seagate Expansion Drive/SECS/Magnetic_Only/Ultimate_Matrix_Sing_mod.txt', Output)
+#%% Run Evaluation
+mlat= np.linspace(49, 81, 50)
+sites=np.array(['LYR', 'BJN', 'TRO', 'HRN', 'ABK', 'SOD', 'NUR', 'BFE', 'NAL',
+        'SOR', 'AND', 'KEV', 'KIL', 'MUO', 'PEL', 'OUJ', 'HAN', 'UPS',
+        'HLP', 'RVK'], dtype='<U3')
 start_time=time.time()
-Ultimate_Matrix= np.loadtxt('Data/SECS_Running_Files/Ultimate_Matrix_Sing_mod.txt')
+Ultimate_Matrix= np.loadtxt('/media/simon/Seagate Expansion Drive/SECS/Magnetic_Only/Ultimate_Matrix_Sing_mod.txt')
 epoch = 2010.
 columns=['Date_UTC', 'MLT']
 for title in mlat:
@@ -81,16 +85,19 @@ for title in mlat:
     columns.append(str(title)+'_Current_North')
 for title in mlat:
     columns.append(str(title)+'_Br')
-for date in pd.date_range(start=  pd.Timestamp('1999-01-01T00:00:00'), end= pd.Timestamp('2020-01-01T00:00:00'), freq='Y'):    
+date_range= pd.date_range(start=  pd.Timestamp('1999-01-01T00:00:00'), end= pd.Timestamp('2020-01-01T00:00:00'), freq='Y')
+for date in progressbar(date_range, max_value= len(date_range), prefix='Looping through each year |'):    
     start= date
     end= date+ pd.DateOffset(years=1)
-    DataFrame= pd.read_hdf('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/Data/Scandinavia/Scandinavia_HDF.h5', where='Date_UTC>=start & Date_UTC<=end')
+    DataFrame= pd.read_hdf('/media/simon/Seagate Expansion Drive/SECS_Visualisation/SECS_Data/Scandinavia_HDF.h5', where='Date_UTC>=start & Date_UTC<end')
     DataFrame=DataFrame.sort_values(by='glat')
     index= DataFrame['Site'].isin(sites)
     DataFrame=DataFrame[index]
     dates=[]
     i=0
-    for date2 in pd.date_range(start=  start, end= end, freq='min'):
+    for date2 in progressbar(pd.date_range(start=  start, end= end, freq='min'), 
+                             max_value=len(pd.date_range(start=  start, end= end, freq='min')), 
+                             prefix='Collecting data from each minute |', suffix= f'| Current Year Range: {start.year}- {end.year}'):
         index=DataFrame.Date_UTC==date2
         if len(DataFrame[index].Site)!=len(sites):
             continue
@@ -108,13 +115,17 @@ for date in pd.date_range(start=  pd.Timestamp('1999-01-01T00:00:00'), end= pd.T
         tmp_df=pd.DataFrame(columns=np.append(columns,['PC_N_INDEX', 'AL_INDEX', 'BX_GSM', 'BY_GSM', 'BZ_GSM']))
         mlts = pyamps.mlt_utils.mlon_to_mlt(105., dates, epoch)
         Output= Ultimate_Matrix@Data
-        tmp_df[columns[2:]]=pd.DataFrame(Output.T)
+        if Output.T.shape== (len(mlat)*3,):
+            tmp_df[columns[2:]]= [Output.T]
+        else:
+            tmp_df[columns[2:]]=pd.DataFrame(Output.T)
         tmp_df['Date_UTC']= dates
         tmp_df['MLT']= mlts
-        Omni= pd.read_hdf('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/omni_1min.h5',where= 'index>=start & index<end', columns=['PC_N_INDEX', 'AL_INDEX', 'BX_GSE', 'BY_GSM', 'BZ_GSM'])
-        index= Omni.index.isin(tmp_df.Date_UTC.values)
+        Omni= pd.read_hdf('/media/simon/Seagate Expansion Drive/Solar_Wind_Data/OMNI_Data_Pandas_shifted.hdf5',
+                          where= 'Date_UTC>=start & Date_UTC<end', columns=['Date_UTC','PC_N_INDEX', 'AL_INDEX', 'BX_GSE', 'BY_GSM', 'BZ_GSM'])
+        index= Omni.Date_UTC.isin(tmp_df.Date_UTC.values)
         tmp_df[['PC_N_INDEX', 'AL_INDEX', 'BX_GSM', 'BY_GSM', 'BZ_GSM']]= pd.DataFrame(Omni.loc[index, ['PC_N_INDEX', 'AL_INDEX', 'BX_GSE', 'BY_GSM', 'BZ_GSM']].values)
-        tmp_df.to_hdf('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/Data/Meridian_Analysis/results_singularity_mod.hdf5','main',mode='a',append=True,format='t', data_columns=True)
-    open('/Home/siv32/zef014/Documents/Masters_Thesis_Code/Masters_Thesis/Data/Meridian_Analysis/last_save.txt', 'w').write(str(date))
+        tmp_df.to_hdf('/media/simon/Seagate Expansion Drive/SECS/Magnetic_Only/results_singularity_mod.hdf5','main',mode='a',append=True,format='t', data_columns=True)
+    open('/media/simon/Seagate Expansion Drive/SECS/Magnetic_Only/last_save.txt', 'w').write(str(date))
     gc.collect()
 end_time=time.time()
