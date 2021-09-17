@@ -8,7 +8,7 @@ Created on Wed Sep  9 10:55:15 2020
 #@author: zef014
 import pandas as pd
 import numpy as np
-import glob
+from glob import glob
 import sys
 def SuperMag2Geo(N, E, D):
     """
@@ -54,19 +54,14 @@ def declination(glat, glon, radius, year):
         Declination used to rotate the magnetometer vectors.
 
     """
-    pysymmetry_path = '/Home/siv32/zef014/'
-    if pysymmetry_path not in sys.path:
-        sys.path.append(pysymmetry_path)
-    sys.path.insert(1, '/Home/siv32/zef014/pysymmetry/src/geodesy.py')
-    sys.path.append('/Home/siv32/zef014/pysymmetry/src/')
-    import geodesy
+    from pysymmetry import geodesy
     colat, radius, _, _ = geodesy.geod2geoc(glat, 0, 0, 0)
     import numpy as np
     from chaosmagpy import load_CHAOS_matfile
     from chaosmagpy.data_utils import mjd2000
     time = mjd2000(year, 1, 1)  # modified Julian date
     # load the CHAOS model
-    model = load_CHAOS_matfile(pysymmetry_path + '/pysymmetry/models/' + 'CHAOS-7.mat') 
+    model = load_CHAOS_matfile(__file__.split('SuperMag_Rotation_Merge.py')[0] + 'CHAOS-7.2.mat') 
     B_radius_core, B_theta_core, B_phi_core = model.synth_values_tdep(time, radius, colat, glon)
     B_radius_crust, B_theta_crust, B_phi_crust = model.synth_values_static(radius, colat, glon)
     Br, Bth, Beast = B_radius_core + B_radius_crust, B_theta_core + B_theta_crust, B_phi_core + B_phi_crust
@@ -103,7 +98,7 @@ def SM_Conversion(in_folder, out_folder=False):
     Parameters
     ----------
     in_folder : str
-        path to folder containing csv files that contain superMAG data. Ensure that all csv files within the folder contain superMAG data!
+        path to folder containing csv files that contain superMAG data. Ensure that all csv files within the folder contain SuperMAG data!
     out_folder : str, optional
         Specify a new path for the HDF file. The default is False which saves the HDF file within the same folder as the data.
 
@@ -118,8 +113,8 @@ def SM_Conversion(in_folder, out_folder=False):
         in_folder+='/'
     if not out_folder.endswith('/'):
         out_folder+='/'
-    files= glob(in_folder+'.*csv')
-    details=pd.read_csv("Super_Mag_stations.csv")
+    files= glob(in_folder+'*.csv')
+    details=pd.read_csv(__file__.split('SuperMag_Rotation_Merge.py')[0]+"Super_Mag_stations.csv")
     columns= ['Date_UTC', 'glon', 'glat', 'Bphi', 'Btheta', 'Br', 'Declination', 'Site']
     pd.DataFrame(columns=columns).to_hdf(out_folder+'Data.hdf5', key='Main', format='table', data_columns=True)
     HDFStore= pd.HDFStore(out_folder+'Data.hdf5',)
@@ -134,8 +129,8 @@ def SM_Conversion(in_folder, out_folder=False):
         print('Rotating Magnetometer Data')
         print('0% Complete')
         for i, site in enumerate(np.unique(data.IAGA.values)):
-            glon=details['GEOLON'][details['IAGA']== site].values
-            glat=details['GEOLAT'][details['IAGA']== site].values
+            glon=float(details['GEOLON'][details['IAGA']== site].values)
+            glat=float(details['GEOLAT'][details['IAGA']== site].values)
             index= temp_df['Site']==site
             temp_df.loc[index, 'glon']= glon
             temp_df.loc[index, 'glat']= glat
