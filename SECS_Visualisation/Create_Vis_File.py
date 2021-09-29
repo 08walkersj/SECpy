@@ -42,6 +42,10 @@ def properties_vaex(inpath, outpath, electro_property):
     BT_bins= [np.nanquantile(in_data.BT_GSM.values, i) for i in np.linspace(0, 1, 21)]
     if not np.any(np.char.startswith(columns, 'BT_Bins')):
         out_data['BT_Bins']= np.array([f'{l} - {u}' for l, u in zip(BT_bins[:-1], BT_bins[1:])])
+    if electro_property.lower()=='current':
+        adj= (np.pi/180)*((6.371E6+110e3)/1e3)
+    else:
+        adj=1
     #Seasonal All mlts
     for months, season in progressbar(zip(np.array([[5,6,7], [11, 12, 1]]), np.array(['summer', 'winter'])), max_value=2, prefix='Seasonal |'):
         prefix= electro_property.lower()+'_'+season
@@ -62,10 +66,10 @@ def properties_vaex(inpath, outpath, electro_property):
         mean=np.array(mean)
         error=np.array(error)
         BT=np.array(BT)
-        out_data[prefix+'_Eastward_Pos']= mean[::2]
-        out_data[prefix+'_Eastward_Error_Pos']= error[::2]
-        out_data[prefix+'_Westward_Pos']= mean[1::2]
-        out_data[prefix+'_Westward_Error_Pos']= error[1::2]
+        out_data[prefix+'_Eastward_Pos']= mean[::2]*adj
+        out_data[prefix+'_Eastward_Error_Pos']= error[::2]*adj
+        out_data[prefix+'_Westward_Pos']= mean[1::2]*adj
+        out_data[prefix+'_Westward_Error_Pos']= error[1::2]*adj
         out_data[prefix+'_BT_Pos']= BT
         neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
         mean=[]
@@ -80,10 +84,10 @@ def properties_vaex(inpath, outpath, electro_property):
         mean=np.array(mean)
         error=np.array(error)
         BT=np.array(BT)
-        out_data[prefix+'_Eastward_Neg']= mean[::2]
-        out_data[prefix+'_Eastward_Error_Neg']= error[::2]
-        out_data[prefix+'_Westward_Neg']= mean[1::2]
-        out_data[prefix+'_Westward_Error_Neg']= error[1::2]
+        out_data[prefix+'_Eastward_Neg']= mean[::2]*adj
+        out_data[prefix+'_Eastward_Error_Neg']= error[::2]*adj
+        out_data[prefix+'_Westward_Neg']= mean[1::2]*adj
+        out_data[prefix+'_Westward_Error_Neg']= error[1::2]*adj
         out_data[prefix+'_BT_Neg']= BT
         out_data.export_hdf5(outpath)
     for mlt in progressbar(np.arange(0, 24), max_value=24, prefix='MLT Seasonal |'):
@@ -113,10 +117,10 @@ def properties_vaex(inpath, outpath, electro_property):
             mean=np.array(mean)
             error=np.array(error)
             BT=np.array(BT)
-            out_data[prefix+'_Eastward_Pos']= mean[::2]
-            out_data[prefix+'_Eastward_Error_Pos']= error[::2]
-            out_data[prefix+'_Westward_Pos']= mean[1::2]
-            out_data[prefix+'_Westward_Error_Pos']= error[1::2]
+            out_data[prefix+'_Eastward_Pos']= mean[::2]*adj
+            out_data[prefix+'_Eastward_Error_Pos']= error[::2]*adj
+            out_data[prefix+'_Westward_Pos']= mean[1::2]*adj
+            out_data[prefix+'_Westward_Error_Pos']= error[1::2]*adj
             out_data[prefix+'_BT_Pos']= BT
             neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
             mean=[]
@@ -136,10 +140,10 @@ def properties_vaex(inpath, outpath, electro_property):
             mean=np.array(mean)
             error=np.array(error)
             BT=np.array(BT)
-            out_data[prefix+'_Eastward_Neg']= mean[::2]
-            out_data[prefix+'_Eastward_Error_Neg']= error[::2]
-            out_data[prefix+'_Westward_Neg']= mean[1::2]
-            out_data[prefix+'_Westward_Error_Neg']= error[1::2]
+            out_data[prefix+'_Eastward_Neg']= mean[::2]*adj
+            out_data[prefix+'_Eastward_Error_Neg']= error[::2]*adj
+            out_data[prefix+'_Westward_Neg']= mean[1::2]*adj
+            out_data[prefix+'_Westward_Error_Neg']= error[1::2]*adj
             out_data[prefix+'_BT_Neg']= BT
             out_data.export_hdf5(outpath)
     #All Seasons MLTs
@@ -167,10 +171,10 @@ def properties_vaex(inpath, outpath, electro_property):
         mean=np.array(mean)
         error=np.array(error)
         BT=np.array(BT)
-        out_data[prefix+'_Eastward_Pos']= mean[::2]
-        out_data[prefix+'_Eastward_Error_Pos']= error[::2]
-        out_data[prefix+'_Westward_Pos']= mean[1::2]
-        out_data[prefix+'_Westward_Error_Pos']= error[1::2]
+        out_data[prefix+'_Eastward_Pos']= mean[::2]*adj
+        out_data[prefix+'_Eastward_Error_Pos']= error[::2]*adj
+        out_data[prefix+'_Westward_Pos']= mean[1::2]*adj
+        out_data[prefix+'_Westward_Error_Pos']= error[1::2]*adj
         out_data[prefix+'_BT_Pos']= BT
         neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
         mean=[]
@@ -185,10 +189,10 @@ def properties_vaex(inpath, outpath, electro_property):
         mean=np.array(mean)
         error=np.array(error)
         BT=np.array(BT)
-        out_data[prefix+'_Eastward_Neg']= mean[::2]
-        out_data[prefix+'_Eastward_Error_Neg']= error[::2]
-        out_data[prefix+'_Westward_Neg']= mean[1::2]
-        out_data[prefix+'_Westward_Error_Neg']= error[1::2]
+        out_data[prefix+'_Eastward_Neg']= mean[::2]*adj
+        out_data[prefix+'_Eastward_Error_Neg']= error[::2]*adj
+        out_data[prefix+'_Westward_Neg']= mean[1::2]*adj
+        out_data[prefix+'_Westward_Error_Neg']= error[1::2]*adj
         out_data[prefix+'_BT_Neg']= BT
         out_data.export_hdf5(outpath)
     #ALl Seasons All MLTS
@@ -209,10 +213,10 @@ def properties_vaex(inpath, outpath, electro_property):
         mean=np.array(mean)
         error=np.array(error)
         BT=np.array(BT)
-        out_data[prefix+'_Eastward_Pos']= mean[::2]
-        out_data[prefix+'_Eastward_Error_Pos']= error[::2]
-        out_data[prefix+'_Westward_Pos']= mean[1::2]
-        out_data[prefix+'_Westward_Error_Pos']= error[1::2]
+        out_data[prefix+'_Eastward_Pos']= mean[::2]*adj
+        out_data[prefix+'_Eastward_Error_Pos']= error[::2]*adj
+        out_data[prefix+'_Westward_Pos']= mean[1::2]*adj
+        out_data[prefix+'_Westward_Error_Pos']= error[1::2]*adj
         out_data[prefix+'_BT_Pos']= BT
         neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
         mean=[]
@@ -227,10 +231,10 @@ def properties_vaex(inpath, outpath, electro_property):
         mean=np.array(mean)
         error=np.array(error)
         BT=np.array(BT)
-        out_data[prefix+'_Eastward_Neg']= mean[::2]
-        out_data[prefix+'_Eastward_Error_Neg']= error[::2]
-        out_data[prefix+'_Westward_Neg']= mean[1::2]
-        out_data[prefix+'_Westward_Error_Neg']= error[1::2]
+        out_data[prefix+'_Eastward_Neg']= mean[::2]*adj
+        out_data[prefix+'_Eastward_Error_Neg']= error[::2]*adj
+        out_data[prefix+'_Westward_Neg']= mean[1::2]*adj
+        out_data[prefix+'_Westward_Error_Neg']= error[1::2]*adj
         out_data[prefix+'_BT_Neg']= BT
         out_data.export_hdf5(outpath)
     #All Seasons Clock Angle All MLTs
@@ -255,10 +259,10 @@ def properties_vaex(inpath, outpath, electro_property):
         mean=np.array(mean)
         error=np.array(error)
         BT=np.array(BT)
-        out_data[prefix+'_Eastward']= mean[::2]
-        out_data[prefix+'_Eastward_Error']= error[::2]
-        out_data[prefix+'_Westward']= mean[1::2]
-        out_data[prefix+'_Westward_Error']= error[1::2]
+        out_data[prefix+'_Eastward']= mean[::2]*adj
+        out_data[prefix+'_Eastward_Error']= error[::2]*adj
+        out_data[prefix+'_Westward']= mean[1::2]*adj
+        out_data[prefix+'_Westward_Error']= error[1::2]*adj
         out_data[prefix+'_BT']= BT
         out_data.export_hdf5(outpath)
     #Seasonal Clock Angle All MLTs
@@ -289,10 +293,10 @@ def properties_vaex(inpath, outpath, electro_property):
             mean=np.array(mean)
             error=np.array(error)
             BT=np.array(BT)
-            out_data[prefix+'_Eastward']= mean[::2]
-            out_data[prefix+'_Eastward_Error']= error[::2]
-            out_data[prefix+'_Westward']= mean[1::2]
-            out_data[prefix+'_Westward_Error']= error[1::2]
+            out_data[prefix+'_Eastward']= mean[::2]*adj
+            out_data[prefix+'_Eastward_Error']= error[::2]*adj
+            out_data[prefix+'_Westward']= mean[1::2]*adj
+            out_data[prefix+'_Westward_Error']= error[1::2]*adj
             out_data[prefix+'_BT']= BT
             out_data.export_hdf5(outpath)
     #Seasonal Clock Angle MLTs
@@ -330,10 +334,10 @@ def properties_vaex(inpath, outpath, electro_property):
                 mean=np.array(mean)
                 error=np.array(error)
                 BT=np.array(BT)
-                out_data[prefix+'_Eastward']= mean[::2]
-                out_data[prefix+'_Eastward_Error']= error[::2]
-                out_data[prefix+'_Westward']= mean[1::2]
-                out_data[prefix+'_Westward_Error']= error[1::2]
+                out_data[prefix+'_Eastward']= mean[::2]*adj
+                out_data[prefix+'_Eastward_Error']= error[::2]*adj
+                out_data[prefix+'_Westward']= mean[1::2]*adj
+                out_data[prefix+'_Westward_Error']= error[1::2]*adj
                 out_data[prefix+'_BT']= BT
                 out_data.export_hdf5(outpath)
     #All Seasons Clock Angle MLTs
@@ -368,14 +372,14 @@ def properties_vaex(inpath, outpath, electro_property):
             mean=np.array(mean)
             error=np.array(error)
             BT=np.array(BT)
-            out_data[prefix+'_Eastward']= mean[::2]
-            out_data[prefix+'_Eastward_Error']= error[::2]
-            out_data[prefix+'_Westward']= mean[1::2]
-            out_data[prefix+'_Westward_Error']= error[1::2]
+            out_data[prefix+'_Eastward']= mean[::2]*adj
+            out_data[prefix+'_Eastward_Error']= error[::2]*adj
+            out_data[prefix+'_Westward']= mean[1::2]*adj
+            out_data[prefix+'_Westward_Error']= error[1::2]*adj
             out_data[prefix+'_BT']= BT
             out_data.export_hdf5(outpath)
     # Dipole Tilt All Clocks All MLTs
-    for tilt in progressbar(np.arange(-30, 35, 10), max_value=7, prefix='Dipole Tilt All Clock Angles All MLTs'):
+    for tilt in progressbar(np.arange(-30, 35, 10), max_value=7, prefix='Dipole Tilt All Clock Angles All MLTs |'):
         prefix= electro_property.lower()+f'_Tilt{tilt}'
         if np.any(np.char.startswith(columns, prefix)):
             print(f'skipped: {prefix}')
@@ -396,10 +400,10 @@ def properties_vaex(inpath, outpath, electro_property):
         mean=np.array(mean)
         error=np.array(error)
         BT=np.array(BT)
-        out_data[prefix+'_Eastward_Pos']= mean[::2]
-        out_data[prefix+'_Eastward_Error_Pos']= error[::2]
-        out_data[prefix+'_Westward_Pos']= mean[1::2]
-        out_data[prefix+'_Westward_Error_Pos']= error[1::2]
+        out_data[prefix+'_Eastward_Pos']= mean[::2]*adj
+        out_data[prefix+'_Eastward_Error_Pos']= error[::2]*adj
+        out_data[prefix+'_Westward_Pos']= mean[1::2]*adj
+        out_data[prefix+'_Westward_Error_Pos']= error[1::2]*adj
         out_data[prefix+'_BT_Pos']= BT
         neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
         mean=[]
@@ -414,10 +418,10 @@ def properties_vaex(inpath, outpath, electro_property):
         mean=np.array(mean)
         error=np.array(error)
         BT=np.array(BT)
-        out_data[prefix+'_Eastward_Neg']= mean[::2]
-        out_data[prefix+'_Eastward_Error_Neg']= error[::2]
-        out_data[prefix+'_Westward_Neg']= mean[1::2]
-        out_data[prefix+'_Westward_Error_Neg']= error[1::2]
+        out_data[prefix+'_Eastward_Neg']= mean[::2]*adj
+        out_data[prefix+'_Eastward_Error_Neg']= error[::2]*adj
+        out_data[prefix+'_Westward_Neg']= mean[1::2]*adj
+        out_data[prefix+'_Westward_Error_Neg']= error[1::2]*adj
         out_data[prefix+'_BT_Neg']= BT
         out_data.export_hdf5(outpath)
     # Dipole Tilt All Clocks MLTs
@@ -449,10 +453,10 @@ def properties_vaex(inpath, outpath, electro_property):
             mean=np.array(mean)
             error=np.array(error)
             BT=np.array(BT)
-            out_data[prefix+'_Eastward_Pos']= mean[::2]
-            out_data[prefix+'_Eastward_Error_Pos']= error[::2]
-            out_data[prefix+'_Westward_Pos']= mean[1::2]
-            out_data[prefix+'_Westward_Error_Pos']= error[1::2]
+            out_data[prefix+'_Eastward_Pos']= mean[::2]*adj
+            out_data[prefix+'_Eastward_Error_Pos']= error[::2]*adj
+            out_data[prefix+'_Westward_Pos']= mean[1::2]*adj
+            out_data[prefix+'_Westward_Error_Pos']= error[1::2]*adj
             out_data[prefix+'_BT_Pos']= BT
             neg_ind=(in_data.BY_GSM_Mean!=9.999e3)&(in_data.BY_GSM<=-3)
             mean=[]
@@ -467,10 +471,10 @@ def properties_vaex(inpath, outpath, electro_property):
             mean=np.array(mean)
             error=np.array(error)
             BT=np.array(BT)
-            out_data[prefix+'_Eastward_Neg']= mean[::2]
-            out_data[prefix+'_Eastward_Error_Neg']= error[::2]
-            out_data[prefix+'_Westward_Neg']= mean[1::2]
-            out_data[prefix+'_Westward_Error_Neg']= error[1::2]
+            out_data[prefix+'_Eastward_Neg']= mean[::2]*adj
+            out_data[prefix+'_Eastward_Error_Neg']= error[::2]*adj
+            out_data[prefix+'_Westward_Neg']= mean[1::2]*adj
+            out_data[prefix+'_Westward_Error_Neg']= error[1::2]*adj
             out_data[prefix+'_BT_Neg']= BT
             out_data.export_hdf5(outpath)
     # Dipole Tilt Clocks MLTs
@@ -511,10 +515,10 @@ def properties_vaex(inpath, outpath, electro_property):
                 mean=np.array(mean)
                 error=np.array(error)
                 BT=np.array(BT)
-                out_data[prefix+'_Eastward']= mean[::2]
-                out_data[prefix+'_Eastward_Error']= error[::2]
-                out_data[prefix+'_Westward']= mean[1::2]
-                out_data[prefix+'_Westward_Error']= error[1::2]
+                out_data[prefix+'_Eastward']= mean[::2]*adj
+                out_data[prefix+'_Eastward_Error']= error[::2]*adj
+                out_data[prefix+'_Westward']= mean[1::2]*adj
+                out_data[prefix+'_Westward_Error']= error[1::2]*adj
                 out_data[prefix+'_BT']= BT
                 out_data.export_hdf5(outpath)
     # Dipole Tilt Clocks All MLTs
@@ -553,12 +557,13 @@ def properties_vaex(inpath, outpath, electro_property):
             mean=np.array(mean)
             error=np.array(error)
             BT=np.array(BT)
-            out_data[prefix+'_Eastward']= mean[::2]
-            out_data[prefix+'_Eastward_Error']= error[::2]
-            out_data[prefix+'_Westward']= mean[1::2]
-            out_data[prefix+'_Westward_Error']= error[1::2]
+            out_data[prefix+'_Eastward']= mean[::2]*adj
+            out_data[prefix+'_Eastward_Error']= error[::2]*adj
+            out_data[prefix+'_Westward']= mean[1::2]*adj
+            out_data[prefix+'_Westward_Error']= error[1::2]*adj
             out_data[prefix+'_BT']= BT
             out_data.export_hdf5(outpath)
+    print('>'*5 +f'{electro_property} Complete'+ '<'*5)
 def properties_pandas(inpath, outpath, electro_property):
     print('\n',electro_property, '\n')
     mlat= np.linspace(49, 81, 50)
@@ -1148,7 +1153,7 @@ def profile_create(inpath, outpath):
                 # new_df['Jet_BY']= ['East_pos']*20 + ['West_pos']*20 + ['East_neg']*20 +['West_pos']*20
                 new_df.to_hdf(outpath,key=key,mode='a',append=True,format='t', data_columns=True)
     store.close()
-    print('>'*5 +'Profiles Complete'+ '<'*5)
+    print('\n'+'>'*5 +'Profiles Complete'+ '<'*5 +'\n')
 def average_current_create(inpath, outpath):
     import warnings
     warnings.filterwarnings("ignore")
