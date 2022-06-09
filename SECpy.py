@@ -129,7 +129,7 @@ def SinC(theta_P, thetap, phi_P, phi0):
     return A/B
 def Local2Global(theta_P, theta0, thetap, phi_P, phi0, VectorPhi, VectorTheta):
     #Based on a rotation of equation 2.17 and 2.18 (Vanhamäki 2020)
-    """CS
+    """
     Parameters
     ----------
     theta_P : numpy.ndarray (Radians)
@@ -188,17 +188,25 @@ def BrDF(thetap, r, R):
         scalar(s) will give the radial magnetic field component at the evaluation 
         point(s) due to the SEC pole(s) in the "local" SEC pole system(s).
     """
-    s= min([r,R])/max([r,R])
     A= u0/(4*np.pi*r)
-    if r<R:
-        B= (1+ s**2 -2*s*np.cos(thetap))**-0.5
-        B-=1
-    elif r>R:
-        B= s/np.sqrt(1+s**2 -2*s*np.cos(thetap))
-        B-= s
+    if isinstance(r, (int, float)):
+        s= min([r,R])/max([r,R])
+        if r<R:
+            B= (1+ s**2 -2*s*np.cos(thetap))**-0.5
+            B-=1
+        elif r>=R:
+            B= s/np.sqrt(1+s**2 -2*s*np.cos(thetap))
+            B-= s
+        else:
+            raise ValueError("Invalid radius inputs shouldn't be equal")
+        return A*B
     else:
-        raise ValueError("Invalid radius inputs shouldn't be equal")
-    return A*B
+        s= np.ones(thetap.shape)
+        s*=np.vstack(np.min(np.vstack([r, [R]*len(r)]), axis=0)/np.max(np.vstack([r, [R]*len(r)]), axis=0))
+        B=np.zeros(thetap.shape)
+        B[r<R]= (1+ s[r<R]**2 -2*s[r<R]*np.cos(thetap[r<R]))**-0.5 -1
+        B[r>=R]= s[r>=R]/np.sqrt(1+s[r>=R]**2 -2*s[r>=R]*np.cos(thetap[r>=R])) -s[r>=R]
+    return np.vstack(A)*B
 def BthetaDF(thetap, r, R):
     #Equation 2.14 (Vanhamäki 2020)
     """
@@ -224,18 +232,25 @@ def BthetaDF(thetap, r, R):
         scalar(s) will give the theta component of the magnetic field at the evaluation 
         point(s) due to the SEC pole(s) in the "local" SEC pole system(s).
     """
-    s= min([r,R])/max([r,R])
-    A= -u0/(4*np.pi*r*np.sin(thetap))
-    if r<R:
-        B= (s-np.cos(thetap))*(1+ s**2 -2*s*np.cos(thetap))**-0.5
-        B+= np.cos(thetap)
-    elif r>R:
-        B=(1-s*np.cos(thetap))/np.sqrt(1+s**2 -2*s*np.cos(thetap))
-        B-=1
+    if isinstance(r, (int, float)):
+        A= -u0/(4*np.pi*r*np.sin(thetap))
+        s= min([r,R])/max([r,R])
+        if r<R:
+            B= (s-np.cos(thetap))*(1+ s**2 -2*s*np.cos(thetap))**-0.5
+            B+= np.cos(thetap)
+        elif r>=R:
+            B=(1-s*np.cos(thetap))/np.sqrt(1+s**2 -2*s*np.cos(thetap))
+            B-=1
+        return A*B
     else:
-        raise ValueError('Invalid radius inputs cannot be equal')
-    return A*B
-def BphiCF(thetap, r, R):
+        A= -u0/(4*np.pi*np.vstack(r)*np.sin(thetap))
+        s= np.ones(thetap.shape)
+        s*=np.vstack(np.min(np.vstack([r, [R]*len(r)]), axis=0)/np.max(np.vstack([r, [R]*len(r)]), axis=0))
+        B= np.zeros(thetap.shape)
+        B[r<R]=(1-s[r<R]*np.cos(thetap[r<R]))/np.sqrt(1+s[r<R]**2 -2*s[r<R]*np.cos(thetap[r<R])) +np.cos(thetap[r<R])
+        B[r>=R]=(1-s[r>=R]*np.cos(thetap[r>=R]))/np.sqrt(1+s[r>=R]**2 -2*s[r>R]*np.cos(thetap[r>=R])) -1
+        return np.vstack(A)*B
+def BphiCF(thetap, r, R, theta0=0):
     #Equation 2.15 (Vanhamäki 2020)
     """
     Parameters
@@ -263,8 +278,13 @@ def BphiCF(thetap, r, R):
     if r< R:
         return thetap*0
     elif r>R:
-        A= -u0*(4*np.pi*r)
-        B= np.tan(thetap/2)
+        A= -u0/(4*np.pi*r)
+        if theta0>0:
+            B= np.zeros(thetap.shape)
+            B[thetap<theta0]= np.tan(thetap[thetap<theta0]/2)*(np.tan(theta0/2))**-2
+            B[~(thetap<theta0)]= np.tan(thetap[~(thetap<theta0)]/2)
+        else:
+            B= np.tan(thetap/2)
         return A*B**-1
     else:
         raise ValueError('Invalid radius inputs cannot be equal')
@@ -690,7 +710,7 @@ class SECS:
                              +str(type(image_current_radius)))
         if self.Rc is not None and self.mode== 'default' and (longitude2 is None or latitude2 is None):
             print('Creating independent poles to account for telluric currents at image_current_radius. \n'+
-                  'if desired method is using image currents that have a specified realtionship with the poles in the ionosphere'+
+                  'if desired method is using image currents that have a specified realtionship with the poles in the ionosphere '+
                   "then set mode='image.'"+ ' Method taken from ' +
                   "Juusola, L., Kauristie, K., Vanhamäki, H., Aikio, A., & van de Kamp, M. (2016). Comparison of auroral ionospheric and field-aligned currents derived from Swarm and ground magnetic field measurements. Journal of Geophysical Research A: Space Physics, 121(9), 9256–9283. https://doi.org/10.1002/2016JA022961")
             print('\n longitude and latitude for ground poles are not defined so copying values from ionospheric poles')
@@ -850,7 +870,7 @@ class SECS:
         #Calculating fitting matrix when multiplied by the magnetometer data will give the SEC pole amplitude(s)
         self.fitting_matrix[system.lower()]= np.dot(invG, G.T)
         return G, invG
-    def G_Matrix(self, magnetometer_longitude, magnetometer_latitude, eval_radius= RE, system='divergence-free'):
+    def G_Matrix(self, magnetometer_longitude, magnetometer_latitude, eval_radius= RE, system='divergence-free', singularity_limit=0):
         """
         Parameters
         ----------
@@ -894,7 +914,7 @@ class SECS:
                            Deg2Rad(magnetometer_longitude), 0, BthetaDF(self.theta_prime, eval_radius, self.R))
             elif system.lower()=='curl-free':
                 G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.pole_longitude), 
-                           Deg2Rad(magnetometer_longitude), BphiCF(self.theta_prime, eval_radius, self.R), 0)
+                           Deg2Rad(magnetometer_longitude), BphiCF(self.theta_prime, eval_radius, self.R, theta0= singularity_limit/self.R), 0)
             else:
                 raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
 
@@ -914,7 +934,7 @@ class SECS:
                 elif system.lower()=='curl-free':
                     G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)))
                     Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.ionospheric_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                           Deg2Rad(magnetometer_longitude), BphiCF(self.ionospheric_theta_prime, eval_radius, self.R), 0)
+                           Deg2Rad(magnetometer_longitude), BphiCF(self.ionospheric_theta_prime, eval_radius, self.R, theta0= singularity_limit/self.R), 0)
                     G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn, Ge
                 else:
                     raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
@@ -934,7 +954,7 @@ class SECS:
                 elif system.lower()=='curl-free':
                     G= np.zeros((3*len(magnetometer_latitude), len(self.ionospheric_pole_latitude)))
                     Gn, Ge= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- magnetometer_latitude), self.theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                                 Deg2Rad(magnetometer_longitude), BphiCF(self.theta_prime, eval_radius, self.R), 0)
+                                 Deg2Rad(magnetometer_longitude), BphiCF(self.theta_prime, eval_radius, self.R, theta0= singularity_limit/self.R), 0)
                     G[0:len(magnetometer_latitude)], G[len(magnetometer_latitude):len(magnetometer_latitude)*2] = Gn, Ge
 
                 else:
@@ -942,7 +962,7 @@ class SECS:
             else:
                 raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
         return G
-    def eval_G_Matrix_B(self, eval_radius= RE, eval_longitude=None, eval_latitude=None, system='divergence-free'):
+    def eval_G_Matrix_B(self, eval_radius= RE, eval_longitude=None, eval_latitude=None, system='divergence-free', singularity_limit=0):
         """
         When multiplied by the SEC pole amplitudes these matrices will return the magnetic field at the evaluation points.
 
@@ -1010,11 +1030,11 @@ class SECS:
                     return  GBr, GBe, -GBn
                 elif system.lower()== 'curl-free':
                     #Radial component of the magnetic field at the evaluation point(s)
-                    GBr=np.zeros(eval_longitude.shape)
+                    
                     #North and east component of the magnetic field at the evaluation point(s)
                     GBn, GBe= Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
-                       Deg2Rad(eval_longitude), BphiCF(eval_theta_prime, eval_radius, self.R), 0)
-                
+                       Deg2Rad(eval_longitude), BphiCF(eval_theta_prime, eval_radius, self.R, theta0= singularity_limit/self.R), 0)
+                    GBr=np.zeros(GBe.shape)
                     return  GBr, GBe, -GBn
                 else:
                     raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
@@ -1033,10 +1053,11 @@ class SECS:
                     return (GBr, GBe, -GBn), (GBr2, GBe2, -GBn2)
                 elif system.lower()=='curl-free':
                     #Radial component of the ionospheric contribution to the magnetic field at the evaluation point(s)
-                    GBr= np.zeros(eval_longitude.shape)
+                    
                     #North and east component of the ionospheric contribution to the magnetic field at the evaluation point(s)
                     GBn, GBe= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), ionospheric_eval_theta_prime, 
-                                         Deg2Rad(self.ionospheric_pole_longitude), Deg2Rad(eval_longitude), BphiCF(ionospheric_eval_theta_prime, eval_radius, self.R), 0)
+                                         Deg2Rad(self.ionospheric_pole_longitude), Deg2Rad(eval_longitude), BphiCF(ionospheric_eval_theta_prime, eval_radius, self.R, theta0= singularity_limit/self.R), 0)
+                    GBr= np.zeros(GBn.shape)
                 else:
                     raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
         elif self.mode=='image':
@@ -1053,11 +1074,10 @@ class SECS:
                    Deg2Rad(eval_longitude), 0, (-self.R/self.Rc)*BthetaDF(eval_theta_prime, eval_radius, (self.Rc**2)/self.R))
                 return (GBr, GBe, -GBn), (GBr2, GBe2, -GBn2)
             elif system.lower()=='curl-free':
-                #Radial component of the ionospheric contribution to the magnetic field at the evaluation point(s)
-                GBr= np.zeros(eval_longitude.shape)
                 #North and east component of the ionospheric contribution to the magnetic field at the evaluation point(s)
                 GBn, GBe= Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                   Deg2Rad(eval_longitude), BphiCF(eval_theta_prime, eval_radius, self.R), 0)
+                   Deg2Rad(eval_longitude), BphiCF(eval_theta_prime, eval_radius, self.R, theta0= singularity_limit/self.R), 0)
+                GBr= np.zeros(GBn.shape)
                 return GBr, GBe, -GBn
         else:
             raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
@@ -1186,7 +1206,7 @@ class SECS:
         invD[:len(s),:len(s)]= inv(D)
         invG= np.dot(np.dot(V.T,invD),U.T)
         return invG
-    def Magnetic_Field(self, Btheta, Bphi, Br, eval_radius= RE, eval_longitude=None, eval_latitude=None, system='divergence-free'):
+    def Magnetic_Field(self, Bphi, Btheta, Br, eval_radius= RE, eval_longitude=None, eval_latitude=None, system='divergence-free', singularity_limit=0):
         """
         Parameters
         ----------
@@ -1270,21 +1290,20 @@ class SECS:
                     if system.lower()=='divergence-free':
                         telluric_eval_theta_prime= theta(self.telluric_pole_latitude, self.telluric_pole_longitude, eval_latitude, eval_longitude)
                 else:
-                    raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
+                    raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
         if self.mode=='default':
             try:
                 if system.lower()=='divergence-free':
                     #Radial component of the magnetic field at the evaluation point(s)
-                    Br= np.dot(m, BrDF(eval_theta_prime,eval_radius, self.R).T)
                     #North and east component of the magnetic field at the evaluation point(s)
                     Bn, Be= np.dot(m, np.transpose(Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
                        Deg2Rad(eval_longitude), 0, BthetaDF(eval_theta_prime, eval_radius, self.R)), (0,2,1)))
-                    
+                    Br= np.dot(m, BrDF(eval_theta_prime,eval_radius, self.R).T)
                     return  Br, Be, -Bn
                 elif system.lower()=='curl-free':
                     #North and east component of the magnetic field at the evaluation point(s)
                     Bn, Be= np.dot(m, np.transpose(Local2Global(Deg2Rad(90- self.pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.pole_longitude), 
-                       Deg2Rad(eval_longitude), BphiCF(eval_theta_prime, eval_radius, self.R), 0), (0,2,1)))
+                       Deg2Rad(eval_longitude), BphiCF(eval_theta_prime, eval_radius, self.R, theta0=singularity_limit/self.R), 0), (0,2,1)))
                     #Radial component of the magnetic field at the evaluation point(s)
                     Br= np.zeros(Bn.shape)
                     return  Br, Be, -Bn
@@ -1343,7 +1362,8 @@ class SECS:
                 raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
         else:
             raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
-    def Currents(self, Btheta, Bphi, Br, eval_radius=None, eval_longitude=None, eval_latitude=None, singularity_limit=0, system='divergence-free'):
+    def Currents(self, Bphi, Btheta, Br, eval_radius=None, eval_longitude=None, eval_latitude=None, 
+                 singularity_limit=0, system='divergence-free', currents='ionospheric'):
         """
         Parameters
         ----------
@@ -1386,14 +1406,24 @@ class SECS:
         except KeyError:
             raise ModelError('Fitting matrix could not be found ensure you have successfully run the "Fitting_Matrix" function or assigned a '+system+'"fitting_matrix" as a key to the fitting_matrix dictionary in this class\nor invalid system type use either "divergence-free" or "curl-free"')
         if eval_radius is None:
-            eval_radius= self.R
+            if currents.lower()=='ionospheric':
+                eval_radius= self.R
+            elif currents.lower() in ['ground', 'telluric']:
+                eval_radius= self.Rc
+            else:
+                raise ArgumentError(f"Incorrect currents option: {currents}. Use either 'ionospheric' or 'ground'")
         if eval_longitude is None and eval_latitude is None:
             eval_longitude= self.eval_longitude
             eval_latitude= self.eval_latitude
             try:
                 eval_theta_prime= self.eval_theta_prime
             except AttributeError:
-                eval_theta_prime=self.eval_ionospheric_theta_prime
+                if currents.lower()=='ionospheric':
+                    eval_theta_prime=self.eval_ionospheric_theta_prime
+                elif currents.lower() in ['ground', 'telluric']:
+                    eval_theta_prime=self.eval_telluric_theta_prime
+                else:
+                    raise ArgumentError(f"Incorrect currents option: {currents}. Use either 'ionospheric' or 'ground'")
         elif eval_longitude is None or eval_latitude is None:
             raise ArgumentError('Evaluation latitude and longitude must be defined if not using the values assigned initially')
         else:
@@ -1419,10 +1449,18 @@ class SECS:
         except AttributeError:
             if self.mode=='default':
                 if system.lower()=='divergence-free':
-                    #North and east component of the current at the evaluation point(s)
-                    Cn, Ce=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                                        Deg2Rad(eval_longitude), m[:len(self.ionospheric_pole_latitude)]*V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
-                    return np.sum(Ce, 1), np.sum(-Cn, 1)
+                    if currents.lower()=='ionospheric':
+                        #North and east component of the current at the evaluation point(s)
+                        Cn, Ce=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                            Deg2Rad(eval_longitude), m[:len(self.ionospheric_pole_latitude)]*V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
+                        return np.sum(Ce, 1), np.sum(-Cn, 1)
+                    elif currents.lower() in ['ground', 'telluric']:
+                        #North and east component of the current at the evaluation point(s)
+                        Cn, Ce=Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
+                                            Deg2Rad(eval_longitude), m[len(self.telluric_pole_latitude):]*V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
+                        return np.sum(Ce, 1), np.sum(-Cn, 1)
+                    else:
+                        raise ArgumentError(f"Incorrect currents option: {currents}. Use either 'ionospheric' or 'ground'")
                 elif system.lower()=='curl-free':
                     #North and east component of the current at the evaluation point(s)
                     Cn, Ce=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
@@ -1433,10 +1471,18 @@ class SECS:
 
             elif self.mode=='image':
                 if system.lower()=='divergence-free':
-                    #North and east component of the current at the evaluation point(s)
-                    Cn, Ce=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
-                                        Deg2Rad(eval_longitude), m*V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
-                    return np.sum(Ce, 1), np.sum(-Cn, 1)
+                    if currents.lower()=='ionospheric':
+                        #North and east component of the current at the evaluation point(s)
+                        Cn, Ce=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
+                                            Deg2Rad(eval_longitude), m*V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
+                        return np.sum(Ce, 1), np.sum(-Cn, 1)
+                    elif currents.lower() in ['ground', 'telluric']:
+                        #North and east component of the current at the evaluation point(s)
+                        Cn, Ce=Local2Global(Deg2Rad(90- self.telluric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.telluric_pole_longitude), 
+                                            Deg2Rad(eval_longitude), m*V(eval_theta_prime, eval_radius, theta0= singularity_limit), 0)
+                        return np.sum(Ce, 1), np.sum(-Cn, 1)
+                    else:
+                        raise ArgumentError(f"Incorrect currents option: {currents}. Use either 'ionospheric' or 'ground'")
                 elif system.lower()=='curl-free':
                     #North and east component of the current at the evaluation point(s)
                     Cn, Ce=Local2Global(Deg2Rad(90- self.ionospheric_pole_latitude), Deg2Rad(90- eval_latitude), eval_theta_prime, Deg2Rad(self.ionospheric_pole_longitude), 
@@ -1446,7 +1492,7 @@ class SECS:
                     raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
         else:
             raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
-    def Amplitude(self, Btheta, Bphi, Br, system='divergence-free'):
+    def Amplitude(self, Bphi, Btheta, Br, system='divergence-free'):
         """
         Parameters
         ----------
@@ -1475,13 +1521,15 @@ class SECS:
             if self.Rc is None or system.lower()=='curl-free':
                 return np.dot(self.fitting_matrix[system.lower()], np.concatenate((Btheta, Bphi, Br)).T)
             elif system.lower()=='divergence-free':
-                return np.dot(self.fitting_matrix[system.lower()], np.concatenate((Btheta, Bphi, Br)).T)[:len(self.ionospheric_pole_latitude)], np.dot(self.fitting_matrix, np.concatenate((Btheta, Bphi, Br)).T)[len(self.ionospheric_pole_latitude):]
+                return np.dot(self.fitting_matrix[system.lower()], 
+                              np.concatenate((Btheta, Bphi, Br)).T)[:len(self.ionospheric_pole_latitude)], \
+                    np.dot(self.fitting_matrix[system.lower()], np.concatenate((Btheta, Bphi, Br)).T)[len(self.ionospheric_pole_latitude):]
             else:
                 raise ArgumentError("Invalid system type use either 'divergence-free' or 'curl-free'")
 
         else:
             raise ArgumentError("Invalid mode selected use either 'default' or 'image'")
-    def Performance_Parameter(self, Btheta, Bphi, Br, Magnetometer_Longitude, Magnetometer_Latitude, **kwargs):
+    def Performance_Parameter(self, Bphi, Btheta, Br, Magnetometer_Longitude, Magnetometer_Latitude, **kwargs):
         """
         Calculates the performance parameter for each component at each magnetometer site as specified by equation 6 and 7 in Marsal(2017)
         Parameters
@@ -1515,19 +1563,24 @@ class SECS:
         if len(kwargs)==0:
             kwargs['system']='divergence-free'
         if hasattr(self,'ionospheric_pole_latitude') and kwargs['system'].lower()=='divergence-free':
-            (Bu, Be, Bn), (Br2, Be2, Bn2)= self.Magnetic_Field(Btheta, Bphi, Br, 
+            (Bu, Be, Bn), (Br2, Be2, Bn2)= self.Magnetic_Field(Bphi, Btheta, Br, 
                                         eval_longitude=Magnetometer_Longitude, 
                                         eval_latitude= Magnetometer_Latitude, **kwargs)
             Bu= Bu+Br2
             Be= Be+Be2
             Bn= Bn+Bn2
         else:
-            Bu, Be, Bn= self.Magnetic_Field(Btheta, Bphi, Br, 
+            Bu, Be, Bn= self.Magnetic_Field(Bphi, Btheta, Br, 
                                             eval_longitude=Magnetometer_Longitude, 
                                             eval_latitude= Magnetometer_Latitude, **kwargs)
         return Performance_Parameter(Br, Bu, len(Br)), Performance_Parameter(Bphi, Be, len(Bphi)), Performance_Parameter(-Btheta, Bn, len(Btheta))
-        
-        
+    def save_amplitudes(self, East, South, Up, grid, time=0, file_path='./', **kwargs):
+        import xarray as xr
+        m= self.Amplitude(East, South, Up, **kwargs)
+        data_vars= {'Amplitude': (['time', 'xi', 'eta'], [m.reshape(grid.shape).T], {'units':'A'})}
+        coords= {'time':[time], 'xi':grid.xi[0], 'eta':grid.eta[:,0]}
+        ds=xr.Dataset(data_vars=data_vars, coords=coords)
+        return ds
         
 
 """Working Example"""
@@ -1544,9 +1597,9 @@ if __name__== '__main__':
     #Calculate a fitting matrix
     poles.Fitting_Matrix(MagLon, MagLat)
     #Find the magnetic field at the points on the evaluation grid at RE
-    Mag= poles.Magnetic_Field(Btheta, Bphi, Br)
+    Mag= poles.Magnetic_Field(Bphi, Btheta, Br)
     #Find the current at the points on the evaluation grid at the SEC pole altitude
-    Cur= poles.Currents(Btheta, Bphi, Br)
+    Cur= poles.Currents(Bphi, Btheta, Br)
     #Create figure and subplots
     fig = plt.figure(num= 'SEC Example -Grid And Data Taken From Vanhamäki (2020)', constrained_layout=False)
     gs = fig.add_gridspec(1, 4, width_ratios= [2,2,2,1])
@@ -1581,13 +1634,13 @@ if __name__== '__main__':
     axes[1].scatter(eval_lon, eval_lat, c= CurMag, vmin=min(CurMag), vmax= 0.6*max(CurMag), cmap= mpl.cm.afmhot_r, transform= ccrs.PlateCarree(), zorder=50)
     #Plot the amplitudes of the SEC poles using a matplotlib colour map
     axes[0].set_title('SEC POLE Amplitudes')
-    scalars= poles.Amplitude(Btheta, Bphi, Br)
+    scalars= poles.Amplitude(Bphi, Btheta, Br)
     axes[0].scatter(node_lons, node_lats, c= scalars, vmin=-45000, vmax=45000, cmap=mpl.cm.jet, transform= ccrs.PlateCarree(), zorder=50)
     mappable=mpl.cm.ScalarMappable(norm = mpl.colors.Normalize(vmin=-45000, vmax=45000), cmap=mpl.cm.jet)
     cbar=plt.colorbar(mappable=mappable)
     cbar.set_label('Ionospheric SEC Pole Amplitudes', rotation=270, labelpad=30)
     #Create a plot comparing the measurements to the model for validity
-    model= poles.Magnetic_Field(Btheta, Bphi, Br, eval_longitude= MagLon, eval_latitude= MagLat)
+    model= poles.Magnetic_Field(Bphi, Btheta, Br, eval_longitude= MagLon, eval_latitude= MagLat)
     model= model[0], *PlottingTools.Geocentric_to_PlateCarree_vector_components(*model[1:], MagLat) #Conversion of vectors to platecarree
     axes[-1].plot(np.linspace(-1.1*np.max(np.abs(model))*1e9, 1.1*np.max(np.abs(model))*1e9, 100), np.linspace(-1.1*np.max(np.abs(model))*1e9, 1.1*np.max(np.abs(model))*1e9, 100))
     axes[-1].set_aspect('auto')

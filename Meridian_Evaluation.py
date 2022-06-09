@@ -33,8 +33,8 @@ A = Apex(date=dt.datetime(2008, 6, 1, 0, 0, 0))
 f1, f2 = A.basevectors_qd(lat_centre, lon_centre, 0, coords = 'geo')
 qd_north = f2 / np.linalg.norm(f2)
 East, North= qd_north[0], qd_north[1]
-Gridproj= CS.CSprojection((lon_centre, lat_centre), [East, North])
-node_grid=CS.CSgrid(Gridproj, 3700, 2200, 50., 50.)
+Gridproj= CS.CSprojection((lon_centre, lat_centre), -np.rad2deg(np.arctan2(East, North)))
+node_grid=CS.CSgrid(Gridproj, 2200, 3700, 50., 50.)
 node_lons, node_lats= node_grid.lon.flatten(), node_grid.lat.flatten()
 MagLat= np.array([54.61, 55.62, 59.9 , 60.5 , 62.3 , 64.52, 64.94, 66.9 , 67.37,
         68.02, 68.35, 69.02, 69.3 , 69.66, 69.76, 70.54, 74.5 , 77.  ,
@@ -55,7 +55,7 @@ f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3= A.basevectors_apex(merid_glat, m
 Le, Ln=node_grid.get_Le_Ln()
 node_f1, node_f2= A.basevectors_qd(node_grid.lat.flatten(), node_grid.lon.flatten(), 110, coords='geo')
 e= node_f1/np.linalg.norm(node_f1, axis=0)
-L= np.diag(e[0]).dot(Le.toarray()) + np.diag(e[1]).dot(Ln.toarray())
+L= np.diag(e[0]).dot(Le) + np.diag(e[1]).dot(Ln)
 G=poles.G_Matrix(MagLon, MagLat)
 GTG= np.dot(G.T, G)
 matrix= GTG + λ1*np.identity(GTG.shape[0]) +λ2*np.dot(L.T, L)/np.max(np.abs(np.dot(L.T, L)))

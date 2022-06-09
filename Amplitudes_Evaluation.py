@@ -88,60 +88,60 @@ start_time=time.time()
 epoch = 2010.
 # columns=['Date_UTC', 'MLT']
 # columns+=[f'Amplitude{i}' for i in range(len(mlat))]
-date_range= pd.date_range(start=  pd.Timestamp('1999-01-01T00:00:00'), end= pd.Timestamp('2020-01-01T00:00:00'), freq='Y')
-from multiprocessing.pool import Pool
-p=Pool(10)
-1/0
-def func(dates):
-    for k, date in progressbar(enumerate(date_range), max_value= len(dates), prefix='Looping through yearly intervals |'):    
-        start= date
-        end= date+ pd.DateOffset(years=1)
-        DataFrame= pd.read_hdf('/media/simon/Seagate Expansion Drive/SECS_Visualisation/SECS_Data/Scandinavia_HDF.h5', where='Date_UTC>=start & Date_UTC<end')
-        DataFrame=DataFrame.sort_values(by='glat')
-        index= DataFrame['Site'].isin(sites)
-        DataFrame=DataFrame[index]
-        dates=[]
-        i=0
-        for date2 in progressbar(pd.date_range(start=  start, end= end, freq='min'), 
-                                 max_value=len(pd.date_range(start=  start, end= end, freq='min')), 
-                                 prefix='Collecting data from each minute |', suffix= f'| Current Range: {start.date()}- {end.date()}'):
-            index=DataFrame.Date_UTC==date2
-            if len(DataFrame[index].Site)!=len(sites):
-                continue
-            else:
-                dates.append(date2)
-                i+=1
-                Btheta, Bphi, Br= -DataFrame[index].Btheta.values*1e-9,DataFrame[index].Bphi.values*1e-9,-DataFrame[index].Br.values*1e-9
-                if i==1:
-                    Data= np.concatenate((Btheta, Bphi, Br))
-                else:
-                    Data= np.c_[Data, np.concatenate((Btheta, Bphi, Br))]
-        if len(dates)==0:
+date_range= pd.date_range(start=  pd.Timestamp('2005-01-01T00:00:00'), end= pd.Timestamp('2006-01-01T00:00:00'), freq='Y')
+cols= [f'Amplitude_{i}' for i in range(2814)]
+for k, date in progressbar(enumerate(date_range), max_value= len(date_range), prefix='Looping through yearly intervals |'):    
+    start= date
+    end= date+ pd.DateOffset(years=1)
+    DataFrame= pd.read_hdf('/media/simon/Seagate Expansion Drive/SECS_Visualisation/SECS_Data/Scandinavia_HDF.h5', where='Date_UTC>=start & Date_UTC<end')
+    DataFrame=DataFrame.sort_values(by='glat')
+    index= DataFrame['Site'].isin(sites)
+    DataFrame=DataFrame[index]
+    dates=[]
+    i=0
+    for date2 in progressbar(pd.date_range(start=  start, end= end, freq='min'), 
+                             max_value=len(pd.date_range(start=  start, end= end, freq='min')), 
+                             prefix='Collecting data from each minute |', suffix= f'| Current Range: {start.date()}- {end.date()}'):
+        index=DataFrame.Date_UTC==date2
+        if len(DataFrame[index].Site)!=len(sites):
             continue
         else:
-            #Interpolation
-            # tmp_df=pd.DataFrame(columns=np.append(columns,['PC_N_INDEX', 'AL_INDEX', 'BX_GSM', 'BY_GSM', 'BZ_GSM']))
-            # mlts = pyamps.mlt_utils.mlon_to_mlt(105., dates, epoch)
-            # if Output.T.shape== (len(mlat)*3,):
-            #     tmp_df[columns[2:]]= [Output.T]
-            # else:
-            #     tmp_df[columns[2:]]=pd.DataFrame(Output.T)
-            # tmp_df['Date_UTC']= dates
-            # tmp_df['MLT']= mlts
-            # tmp_df[columns[2:]]= 
-            # Omni= pd.read_hdf('/media/simon/Seagate Expansion Drive/Solar_Wind_Data/OMNI_Data_Pandas_shifted.hdf5',
-            #                   where= 'Date_UTC>=start & Date_UTC<end', columns=['Date_UTC','PC_N_INDEX', 'AL_INDEX', 'BX_GSE', 'BY_GSM', 'BZ_GSM'])
-            # index= Omni.Date_UTC.isin(tmp_df.Date_UTC.values)
-            # tmp_df[['PC_N_INDEX', 'AL_INDEX', 'BX_GSM', 'BY_GSM', 'BZ_GSM']]= pd.DataFrame(Omni.loc[index, ['PC_N_INDEX', 'AL_INDEX', 'BX_GSE', 'BY_GSM', 'BZ_GSM']].values)
-            # tmp_df.to_hdf('/media/simon/Seagate Expansion Drive/SECS/Magnetic_Only/results_singularity_mod.hdf5','main',mode='a',append=True,format='t', data_columns=True)
-            #Full grid
-            amplitude= np.dot(fitting_matrix, Data).T.flatten()
-            Date_UTC=np.array([np.array(dates).astype('datetime64[m]').astype(float)]*len(node_lons)).flatten()
-            vx.from_arrays(Date_UTC= Date_UTC, longitude=np.concatenate([node_lons]*len(dates)), 
-                           latitude=np.concatenate([node_lats]*len(dates)), 
-                           amplitude= amplitude).export_hdf5(f'/media/simon/Seagate Expansion Drive/SECS/Amplitude/Amplitude_batch{date.year}.hdf5')
-            open('/media/simon/Seagate Expansion Drive/SECS/Magnetic_Only/last_save.txt', 'w').write(str(date))
-        gc.collect()
-end_time=time.time()
-Pool.map(np.split(date_range[:-1], 10)+[date_range[-1]], func)
-
+            dates.append(date2)
+            i+=1
+            Btheta, Bphi, Br= -DataFrame[index].Btheta.values*1e-9,DataFrame[index].Bphi.values*1e-9,-DataFrame[index].Br.values*1e-9
+            if i==1:
+                Data= np.concatenate((Btheta, Bphi, Br)).T
+            else:
+                Data= np.c_[Data, np.concatenate((Btheta, Bphi, Br)).T]
+                break
+    if len(dates)==0:
+        continue
+    else:
+        #Interpolation
+        # tmp_df=pd.DataFrame(columns=np.append(columns,['PC_N_INDEX', 'AL_INDEX', 'BX_GSM', 'BY_GSM', 'BZ_GSM']))
+        # mlts = pyamps.mlt_utils.mlon_to_mlt(105., dates, epoch)
+        # if Output.T.shape== (len(mlat)*3,):
+        #     tmp_df[columns[2:]]= [Output.T]
+        # else:
+        #     tmp_df[columns[2:]]=pd.DataFrame(Output.T)
+        # tmp_df['Date_UTC']= dates
+        # tmp_df['MLT']= mlts
+        # tmp_df[columns[2:]]= 
+        # Omni= pd.read_hdf('/media/simon/Seagate Expansion Drive/Solar_Wind_Data/OMNI_Data_Pandas_shifted.hdf5',
+        #                   where= 'Date_UTC>=start & Date_UTC<end', columns=['Date_UTC','PC_N_INDEX', 'AL_INDEX', 'BX_GSE', 'BY_GSM', 'BZ_GSM'])
+        # index= Omni.Date_UTC.isin(tmp_df.Date_UTC.values)
+        # tmp_df[['PC_N_INDEX', 'AL_INDEX', 'BX_GSM', 'BY_GSM', 'BZ_GSM']]= pd.DataFrame(Omni.loc[index, ['PC_N_INDEX', 'AL_INDEX', 'BX_GSE', 'BY_GSM', 'BZ_GSM']].values)
+        # tmp_df.to_hdf('/media/simon/Seagate Expansion Drive/SECS/Magnetic_Only/results_singularity_mod.hdf5','main',mode='a',append=True,format='t', data_columns=True)
+        #Full grid
+        dates=np.array(dates).astype('datetime64[m]')
+        df= pd.DataFrame({'Date_UTC': dates})
+        amplitude= np.dot(fitting_matrix, Data).T
+        df[cols]= pd.DataFrame(amplitude)
+        vx.from_pandas(df).export_hdf5(f'/media/simon/Seagate Expansion Drive/SECS/Amplitude/Amplitude_batch{date.year}.hdf5')
+#         Date_UTC=np.array([np.array(dates).astype('datetime64[m]').astype(float)]*len(node_lons)).flatten()
+#         vx.from_arrays(Date_UTC= Date_UTC, longitude=np.concatenate([node_lons]*len(dates)), 
+#                        latitude=np.concatenate([node_lats]*len(dates)), 
+#                        amplitude= amplitude).export_hdf5(f'/media/simon/Seagate Expansion Drive/SECS/Amplitude/Amplitude_batch{date.year}.hdf5')
+#         open('/media/simon/Seagate Expansion Drive/SECS/Magnetic_Only/last_save.txt', 'w').write(str(date))
+#         gc.collect()
+# end_time=time.time()
